@@ -14,135 +14,199 @@ local playerData = {}
 local warnings = {}
 local afkPlayers = {}
 
-local maxCommandLength = 200
+local maxCommandLength = 20000
 local rateLimit = {}
+local pendingCommands = {}
 
 local function isOwner(playerName)
-	for _, name in pairs(owners) do
-		if playerName:lower() == name:lower() then return true end
+	if not playerName or type(playerName) ~= "string" then return false end
+	local lowerName = playerName:lower()
+	for _, name in ipairs(owners) do
+		if tostring(name):lower() == lowerName then return true end
 	end
 	return false
 end
 
 local function isAdmin(playerName)
+	if not playerName or type(playerName) ~= "string" then return false end
 	if isOwner(playerName) then return true end
-	for _, name in pairs(admins) do
-		if playerName:lower() == name:lower() then return true end
+
+	local lowerName = playerName:lower()
+	for _, name in ipairs(admins) do
+		if tostring(name):lower() == lowerName then return true end
 	end
-	for _, name in pairs(tempAdmins) do
-		if playerName:lower() == name:lower() then return true end
+	for _, name in ipairs(tempAdmins) do
+		if tostring(name):lower() == lowerName then return true end
 	end
 	return false
 end
 
 local function isMod(playerName)
+	if not playerName or type(playerName) ~= "string" then return false end
 	if isAdmin(playerName) then return true end
-	for _, name in pairs(mods) do
-		if playerName:lower() == name:lower() then return true end
+
+	local lowerName = playerName:lower()
+	for _, name in ipairs(mods) do
+		if tostring(name):lower() == lowerName then return true end
 	end
 	return false
 end
 
 local function isBanned(playerName)
-	for _, name in pairs(bannedPlayers) do
-		if playerName:lower() == name:lower() then return true end
+	if not playerName or type(playerName) ~= "string" then return false end
+	local lowerName = playerName:lower()
+	for _, name in ipairs(bannedPlayers) do
+		if tostring(name):lower() == lowerName then return true end
 	end
 	return false
 end
 
 local function isMuted(playerName)
-	for _, name in pairs(mutedPlayers) do
-		if playerName:lower() == name:lower() then return true end
+	if not playerName or type(playerName) ~= "string" then return false end
+	local lowerName = playerName:lower()
+	for _, name in ipairs(mutedPlayers) do
+		if tostring(name):lower() == lowerName then return true end
 	end
 	return false
 end
 
+local groupCache = {}
 local function isGroupAdmin(player)
+	if not player or not player:IsA("Player") then return false end
 	if groupId == 0 then return false end
+
+	local userId = player.UserId
+	if groupCache[userId] ~= nil then
+		return groupCache[userId]
+	end
+
 	local success, result = pcall(function()
 		return player:GetRankInGroup(groupId) >= groupRank
 	end)
-	return success and result
+
+	groupCache[userId] = success and result
+	return groupCache[userId] or false
 end
 
 local function checkRateLimit(player)
+	if not player or not player:IsA("Player") then return false end
+
 	local now = tick()
-	if not rateLimit[player.Name] then
-		rateLimit[player.Name] = {count = 1, time = now}
+	local playerName = player.Name
+
+	for name, data in pairs(rateLimit) do
+		if now - data.time > 30 then
+			rateLimit[name] = nil
+		end
+	end
+
+	if not rateLimit[playerName] then
+		rateLimit[playerName] = {count = 1, time = now}
 		return true
 	end
 
-	if now - rateLimit[player.Name].time > 10 then
-		rateLimit[player.Name] = {count = 1, time = now}
+	if now - rateLimit[playerName].time > 10 then
+		rateLimit[playerName] = {count = 1, time = now}
 		return true
 	end
 
-	rateLimit[player.Name].count = rateLimit[player.Name].count + 1
-	return rateLimit[player.Name].count <= 5
+	rateLimit[playerName].count = rateLimit[playerName].count + 1
+	if rateLimit[playerName].count > 5 then
+	
+		return false
+	end
+
+	return true
 end
 
 local function getPlayers(plr, str)
-	if not str then return {} end
-	str = str:lower()
+	if not str or type(str) ~= "string" then return {} end
+
+	str = str:lower():gsub("%s+", "")
 	local targets = {}
+	local allPlayers = game.Players:GetPlayers()
+
 	if str == "all" then
-		targets = game.Players:GetPlayers()
+		targets = allPlayers
 	elseif str == "others" then
-		for _, p in pairs(game.Players:GetPlayers()) do
-			if p ~= plr then table.insert(targets, p) end
+		for _, p in ipairs(allPlayers) do
+			if p ~= plr and p:IsA("Player") then
+				table.insert(targets, p)
+			end
 		end
 	elseif str == "me" then
-		table.insert(targets, plr)
+		if plr and plr:IsA("Player") then
+			table.insert(targets, plr)
+		end
 	elseif str == "admins" then
-		for _, p in pairs(game.Players:GetPlayers()) do
-			if isAdmin(p.Name) then table.insert(targets, p) end
+		for _, p in ipairs(allPlayers) do
+			if p:IsA("Player") and isAdmin(p.Name) then
+				table.insert(targets, p)
+			end
 		end
 	elseif str == "nonadmins" then
-		for _, p in pairs(game.Players:GetPlayers()) do
-			if not isAdmin(p.Name) then table.insert(targets, p) end
+		for _, p in ipairs(allPlayers) do
+			if p:IsA("Player") and not isAdmin(p.Name) then
+				table.insert(targets, p)
+			end
 		end
 	elseif str == "mods" then
-		for _, p in pairs(game.Players:GetPlayers()) do
-			if isMod(p.Name) then table.insert(targets, p) end
+		for _, p in ipairs(allPlayers) do
+			if p:IsA("Player") and isMod(p.Name) then
+				table.insert(targets, p)
+			end
 		end
 	elseif str == "random" then
-		local allPlayers = game.Players:GetPlayers()
 		if #allPlayers > 0 then
 			table.insert(targets, allPlayers[math.random(1, #allPlayers)])
 		end
 	elseif str == "banned" then
-		for _, name in pairs(bannedPlayers) do
+		for _, name in ipairs(bannedPlayers) do
 			local player = game.Players:FindFirstChild(name)
-			if player then table.insert(targets, player) end
+			if player and player:IsA("Player") then
+				table.insert(targets, player)
+			end
 		end
 	elseif str == "muted" then
-		for _, name in pairs(mutedPlayers) do
+		for _, name in ipairs(mutedPlayers) do
 			local player = game.Players:FindFirstChild(name)
-			if player then table.insert(targets, player) end
+			if player and player:IsA("Player") then
+				table.insert(targets, player)
+			end
 		end
 	else
-		for _, p in pairs(game.Players:GetPlayers()) do
-			if p.Name:lower():find(str) then
+		for _, p in ipairs(allPlayers) do
+			if p:IsA("Player") and p.Name:lower():find(str, 1, true) then
 				table.insert(targets, p)
 			end
 		end
 	end
+
 	return targets
 end
 
 local function createMessageGui(parent, title, messageText, duration, messageType)
+	if not parent or not parent:IsA("PlayerGui") then return nil end
+
 	duration = duration or 5
+
+	for _, gui in ipairs(parent:GetChildren()) do
+		if gui:IsA("ScreenGui") and gui.Name == "AdminMessageGUI" then
+			gui:Destroy()
+		end
+	end
+
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "AdminMessageGUI"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
 
-	-- Main container
 	local mainContainer = Instance.new("Frame")
 	mainContainer.Size = UDim2.new(0, 450, 0, 300)
 	mainContainer.Position = UDim2.new(0.5, -225, 0.5, -150)
 	mainContainer.BackgroundTransparency = 1
 	mainContainer.Parent = gui
 
-	-- Shadow effect
 	local shadow = Instance.new("Frame")
 	shadow.Size = UDim2.new(1, 8, 1, 8)
 	shadow.Position = UDim2.new(0, 4, 0, 4)
@@ -151,7 +215,6 @@ local function createMessageGui(parent, title, messageText, duration, messageTyp
 	shadow.BorderSizePixel = 0
 	shadow.Parent = mainContainer
 
-	-- Main window
 	local mainFrame = Instance.new("Frame")
 	mainFrame.Size = UDim2.new(1, 0, 1, 0)
 	mainFrame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.15)
@@ -159,10 +222,8 @@ local function createMessageGui(parent, title, messageText, duration, messageTyp
 	mainFrame.BorderColor3 = Color3.new(0.3, 0.3, 0.4)
 	mainFrame.Parent = mainContainer
 
-	-- Title bar
 	local titleBar = Instance.new("Frame")
 	titleBar.Size = UDim2.new(1, 0, 0, 40)
-	titleBar.BackgroundColor3 = Color3.new(0.15, 0.15, 0.2)
 	titleBar.BorderSizePixel = 0
 	titleBar.Parent = mainFrame
 
@@ -176,21 +237,20 @@ local function createMessageGui(parent, title, messageText, duration, messageTyp
 		titleBar.BackgroundColor3 = Color3.new(0.1, 0.3, 0.6)
 	end
 
-	-- Icon
 	local icon = Instance.new("TextLabel")
 	icon.Size = UDim2.new(0, 30, 0, 30)
 	icon.Position = UDim2.new(0, 10, 0.5, -15)
 	icon.Font = Enum.Font.ArialBold
-	icon.FontSize = Enum.FontSize.Size24
+	icon.TextSize = 20
 	icon.BackgroundTransparency = 1
 	icon.TextColor3 = Color3.new(1, 1, 1)
 
 	if messageType == "error" then
-		icon.Text = "✗"
+		icon.Text = "X"
 	elseif messageType == "warning" then
 		icon.Text = "⚠"
 	elseif messageType == "success" then
-		icon.Text = "✓"
+		icon.Text = "Y"
 	else
 		icon.Text = "ℹ"
 	end
@@ -200,44 +260,50 @@ local function createMessageGui(parent, title, messageText, duration, messageTyp
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.Size = UDim2.new(1, -50, 1, 0)
 	titleLabel.Position = UDim2.new(0, 50, 0, 0)
-	titleLabel.Text = title
+	titleLabel.Text = title or "Message"
 	titleLabel.TextColor3 = Color3.new(1, 1, 1)
 	titleLabel.Font = Enum.Font.ArialBold
-	titleLabel.FontSize = Enum.FontSize.Size18
+	titleLabel.TextSize = 18
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.BackgroundTransparency = 1
 	titleLabel.Parent = titleBar
 
-	-- Message content area
 	local contentFrame = Instance.new("Frame")
 	contentFrame.Size = UDim2.new(1, -20, 1, -60)
 	contentFrame.Position = UDim2.new(0, 10, 0, 50)
 	contentFrame.BackgroundTransparency = 1
 	contentFrame.Parent = mainFrame
 
-	-- Scrolling frame for long messages
 	local scrollFrame = Instance.new("ScrollingFrame")
 	scrollFrame.Size = UDim2.new(1, 0, 1, 0)
 	scrollFrame.BackgroundTransparency = 1
 	scrollFrame.BorderSizePixel = 0
 	scrollFrame.ScrollBarThickness = 6
+	scrollFrame.ScrollingDirection = Enum.ScrollingDirection.Y
 	scrollFrame.Parent = contentFrame
 
-	-- Message text
 	local messageLabel = Instance.new("TextLabel")
 	messageLabel.Size = UDim2.new(1, -4, 0, 0)
-	messageLabel.Text = messageText
+	messageLabel.Text = messageText or ""
 	messageLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
 	messageLabel.Font = Enum.Font.Arial
-	messageLabel.FontSize = Enum.FontSize.Size14
+	messageLabel.TextSize = 14
 	messageLabel.TextWrapped = true
 	messageLabel.TextXAlignment = Enum.TextXAlignment.Left
 	messageLabel.TextYAlignment = Enum.TextYAlignment.Top
 	messageLabel.BackgroundTransparency = 1
 	messageLabel.Parent = scrollFrame
 
-	messageLabel.Size = UDim2.new(1, -4, 0, messageLabel.TextBounds.Y + 10)
-	scrollFrame.CanvasSize = UDim2.new(0, 0, 0, messageLabel.TextBounds.Y + 20)
+	local textService = game:GetService("TextService")
+	local textSize = textService:GetTextSize(
+		messageText or "",
+		14,
+		Enum.Font.Arial,
+		Vector2.new(400, math.huge)
+	)
+
+	messageLabel.Size = UDim2.new(1, -4, 0, math.max(50, textSize.Y + 10))
+	scrollFrame.CanvasSize = UDim2.new(0, 0, 0, textSize.Y + 20)
 
 	local timerBar = Instance.new("Frame")
 	timerBar.Size = UDim2.new(1, 0, 0, 3)
@@ -246,28 +312,42 @@ local function createMessageGui(parent, title, messageText, duration, messageTyp
 	timerBar.BorderSizePixel = 0
 	timerBar.Parent = mainFrame
 
-	-- Auto-close timer animation
+	gui.Parent = parent
+
 	spawn(function()
 		local startTime = tick()
 		local endTime = startTime + duration
 
-		while tick() < endTime do
+		while tick() < endTime and gui.Parent do
 			local elapsed = tick() - startTime
 			local progress = elapsed / duration
 			timerBar.Size = UDim2.new(1 - progress, 0, 0, 3)
 			wait(0.1)
 		end
-		gui:Destroy()
+
+		if gui.Parent then
+			gui:Destroy()
+		end
 	end)
 
-	gui.Parent = parent
 	return gui
 end
 
 local function createHintGui(parent, messageText, duration)
+	if not parent or not parent:IsA("PlayerGui") then return nil end
+
 	duration = duration or 3
+
+	for _, gui in ipairs(parent:GetChildren()) do
+		if gui:IsA("ScreenGui") and gui.Name == "AdminHintGUI" then
+			gui:Destroy()
+		end
+	end
+
 	local gui = Instance.new("ScreenGui")
-	gui.Name = "AdminHintGUI"
+	gui.Name = "Admin"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
 
 	local mainFrame = Instance.new("Frame")
 	mainFrame.Size = UDim2.new(0.6, 0, 0, 50)
@@ -283,7 +363,7 @@ local function createHintGui(parent, messageText, duration)
 	icon.Position = UDim2.new(0, 10, 0.5, -15)
 	icon.Text = "💬"
 	icon.Font = Enum.Font.ArialBold
-	icon.TextSize = 20 
+	icon.TextSize = 20
 	icon.BackgroundTransparency = 1
 	icon.TextColor3 = Color3.new(1, 1, 1)
 	icon.Parent = mainFrame
@@ -291,15 +371,14 @@ local function createHintGui(parent, messageText, duration)
 	local messageLabel = Instance.new("TextLabel")
 	messageLabel.Size = UDim2.new(1, -50, 1, 0)
 	messageLabel.Position = UDim2.new(0, 50, 0, 0)
-	messageLabel.Text = messageText
+	messageLabel.Text = messageText or ""
 	messageLabel.TextColor3 = Color3.new(1, 1, 1)
 	messageLabel.Font = Enum.Font.ArialBold
-	messageLabel.FontSize = Enum.FontSize.Size14
+	messageLabel.TextSize = 14
 	messageLabel.BackgroundTransparency = 1
 	messageLabel.TextXAlignment = Enum.TextXAlignment.Left
 	messageLabel.Parent = mainFrame
 
-	-- Timer bar
 	local timerBar = Instance.new("Frame")
 	timerBar.Size = UDim2.new(1, 0, 0, 3)
 	timerBar.Position = UDim2.new(0, 0, 1, -3)
@@ -307,35 +386,56 @@ local function createHintGui(parent, messageText, duration)
 	timerBar.BorderSizePixel = 0
 	timerBar.Parent = mainFrame
 
-	-- Animate timer
+	gui.Parent = parent
+
+	mainFrame.Position = UDim2.new(0.2, 0, -0.1, 0)
+
 	spawn(function()
+		
+		for i = 1, 10 do
+			mainFrame.Position = UDim2.new(0.2, 0, -0.1 + (i * 0.01), 0)
+			wait(0.01)
+		end
+
 		local startTime = tick()
 		local endTime = startTime + duration
 
-		while tick() < endTime do
+		while tick() < endTime and gui.Parent do
 			local elapsed = tick() - startTime
 			local progress = elapsed / duration
 			timerBar.Size = UDim2.new(1 - progress, 0, 0, 3)
 			wait(0.05)
 		end
-		gui:Destroy()
+
+		for i = 1, 10 do
+			mainFrame.Position = UDim2.new(0.2, 0, 0.02 - (i * 0.01), 0)
+			wait(0.01)
+		end
+
+		if gui.Parent then
+			gui:Destroy()
+		end
 	end)
 
-	-- Slide in animation
-	mainFrame.Position = UDim2.new(0.2, 0, -0.1, 0)
-	for i = 1, 10 do
-		mainFrame.Position = UDim2.new(0.2, 0, -0.1 + (i * 0.01), 0)
-		wait(0.01)
-	end
-
-	gui.Parent = parent
 	return gui
 end
 
 local function createToastGui(parent, messageText, duration, toastType)
+	if not parent or not parent:IsA("PlayerGui") then return nil end
+
 	duration = duration or 3
+	toastType = toastType or "info"
+
+	for _, gui in ipairs(parent:GetChildren()) do
+		if gui:IsA("ScreenGui") and gui.Name == "AdminToastGUI" then
+			gui:Destroy()
+		end
+	end
+
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "AdminToastGUI"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
 
 	local mainFrame = Instance.new("Frame")
 	mainFrame.Size = UDim2.new(0, 350, 0, 70)
@@ -350,19 +450,18 @@ local function createToastGui(parent, messageText, duration, toastType)
 	local backgroundColor, iconText
 	if toastType == "error" then
 		backgroundColor = Color3.new(0.6, 0.1, 0.1)
-		iconText = "✗"
+		iconText = "X"
 	elseif toastType == "warning" then
 		backgroundColor = Color3.new(0.7, 0.5, 0)
 		iconText = "⚠"
 	elseif toastType == "success" then
 		backgroundColor = Color3.new(0.1, 0.6, 0.1)
-		iconText = "✓"
+		iconText = "Y"
 	else
 		backgroundColor = Color3.new(0.1, 0.3, 0.6)
 		iconText = "ℹ"
 	end
 
-	-- Icon background
 	local iconBg = Instance.new("Frame")
 	iconBg.Size = UDim2.new(0, 50, 0, 50)
 	iconBg.Position = UDim2.new(0, 10, 0.5, -25)
@@ -370,36 +469,32 @@ local function createToastGui(parent, messageText, duration, toastType)
 	iconBg.BorderSizePixel = 0
 	iconBg.Parent = mainFrame
 
-	-- Icon
 	local icon = Instance.new("TextLabel")
 	icon.Size = UDim2.new(1, 0, 1, 0)
 	icon.Text = iconText
 	icon.TextColor3 = Color3.new(1, 1, 1)
 	icon.Font = Enum.Font.ArialBold
-	icon.FontSize = Enum.FontSize.Size24
+	icon.TextSize = 24
 	icon.BackgroundTransparency = 1
 	icon.Parent = iconBg
 
-	-- Message container
 	local messageContainer = Instance.new("Frame")
 	messageContainer.Size = UDim2.new(1, -80, 1, -20)
 	messageContainer.Position = UDim2.new(0, 70, 0, 10)
 	messageContainer.BackgroundTransparency = 1
 	messageContainer.Parent = mainFrame
 
-	-- Message text
 	local messageLabel = Instance.new("TextLabel")
 	messageLabel.Size = UDim2.new(1, 0, 1, 0)
-	messageLabel.Text = messageText
+	messageLabel.Text = messageText or ""
 	messageLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
 	messageLabel.Font = Enum.Font.Arial
-	messageLabel.FontSize = Enum.FontSize.Size14
+	messageLabel.TextSize = 14
 	messageLabel.TextWrapped = true
 	messageLabel.TextXAlignment = Enum.TextXAlignment.Left
 	messageLabel.BackgroundTransparency = 1
 	messageLabel.Parent = messageContainer
 
-	-- Progress bar
 	local progressBar = Instance.new("Frame")
 	progressBar.Size = UDim2.new(1, 0, 0, 3)
 	progressBar.Position = UDim2.new(0, 0, 1, -3)
@@ -407,37 +502,57 @@ local function createToastGui(parent, messageText, duration, toastType)
 	progressBar.BorderSizePixel = 0
 	progressBar.Parent = mainFrame
 
-	-- Animate progress bar
+	gui.Parent = parent
+
+	mainFrame.Position = UDim2.new(0.5, -175, 1, 0)
+
 	spawn(function()
+		
+		for i = 1, 20 do
+			mainFrame.Position = UDim2.new(0.5, -175, 1 - (i * 0.0075), 0)
+			wait(0.01)
+		end
+
 		local startTime = tick()
 		local endTime = startTime + duration
 
-		while tick() < endTime do
+		while tick() < endTime and gui.Parent do
 			local elapsed = tick() - startTime
 			local progress = elapsed / duration
 			progressBar.Size = UDim2.new(1 - progress, 0, 0, 3)
 			wait(0.05)
 		end
-		gui:Destroy()
+
+		for i = 1, 20 do
+			mainFrame.Position = UDim2.new(0.5, -175, 0.85 + (i * 0.0075), 0)
+			wait(0.01)
+		end
+
+		if gui.Parent then
+			gui:Destroy()
+		end
 	end)
 
-	-- Slide up animation
-	mainFrame.Position = UDim2.new(0.5, -175, 1, 0)
-	for i = 1, 20 do
-		mainFrame.Position = UDim2.new(0.5, -175, 1 - (i * 0.0075), 0)
-		wait(0.01)
-	end
-
-	gui.Parent = parent
 	return gui
 end
 
 local function createAlertGui(parent, title, messageText, duration, alertType)
-	duration = duration or 5
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "AdminAlertGUI"
+	if not parent or not parent:IsA("PlayerGui") then return nil end
 
-	-- Dark overlay
+	duration = duration or 5
+	alertType = alertType or "info"
+
+	for _, gui in ipairs(parent:GetChildren()) do
+		if gui:IsA("ScreenGui") and gui.Name == "AdminAlertGUI" then
+			gui:Destroy()
+		end
+	end
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "Admin"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+
 	local overlay = Instance.new("Frame")
 	overlay.Size = UDim2.new(1, 0, 1, 0)
 	overlay.BackgroundColor3 = Color3.new(0, 0, 0)
@@ -445,7 +560,6 @@ local function createAlertGui(parent, title, messageText, duration, alertType)
 	overlay.BorderSizePixel = 0
 	overlay.Parent = gui
 
-	-- Main alert window
 	local mainFrame = Instance.new("Frame")
 	mainFrame.Size = UDim2.new(0, 400, 0, 250)
 	mainFrame.Position = UDim2.new(0.5, -200, 0.5, -125)
@@ -454,7 +568,6 @@ local function createAlertGui(parent, title, messageText, duration, alertType)
 	mainFrame.BorderColor3 = Color3.new(0.3, 0.3, 0.4)
 	mainFrame.Parent = gui
 
-	-- Title bar
 	local titleBar = Instance.new("Frame")
 	titleBar.Size = UDim2.new(1, 0, 0, 40)
 
@@ -469,12 +582,11 @@ local function createAlertGui(parent, title, messageText, duration, alertType)
 	titleBar.BorderSizePixel = 0
 	titleBar.Parent = mainFrame
 
-	-- Alert icon
 	local icon = Instance.new("TextLabel")
 	icon.Size = UDim2.new(0, 30, 0, 30)
 	icon.Position = UDim2.new(0, 10, 0.5, -15)
 	icon.Font = Enum.Font.ArialBold
-	icon.FontSize = Enum.FontSize.Size24
+	icon.TextSize = 20
 	icon.BackgroundTransparency = 1
 	icon.TextColor3 = Color3.new(1, 1, 1)
 	icon.Parent = titleBar
@@ -482,24 +594,22 @@ local function createAlertGui(parent, title, messageText, duration, alertType)
 	if alertType == "warning" then
 		icon.Text = "⚠"
 	elseif alertType == "error" then
-		icon.Text = "✗"
+		icon.Text = "X"
 	else
 		icon.Text = "ℹ"
 	end
 
-	-- Title
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.Size = UDim2.new(1, -50, 1, 0)
 	titleLabel.Position = UDim2.new(0, 50, 0, 0)
-	titleLabel.Text = title
+	titleLabel.Text = title or "Alert"
 	titleLabel.TextColor3 = Color3.new(1, 1, 1)
 	titleLabel.Font = Enum.Font.ArialBold
-	titleLabel.FontSize = Enum.FontSize.Size18
+	titleLabel.TextSize = 18
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.BackgroundTransparency = 1
 	titleLabel.Parent = titleBar
 
-	-- Message content
 	local messageFrame = Instance.new("Frame")
 	messageFrame.Size = UDim2.new(1, -20, 1, -80)
 	messageFrame.Position = UDim2.new(0, 10, 0, 50)
@@ -508,23 +618,22 @@ local function createAlertGui(parent, title, messageText, duration, alertType)
 
 	local messageLabel = Instance.new("TextLabel")
 	messageLabel.Size = UDim2.new(1, 0, 1, 0)
-	messageLabel.Text = messageText
+	messageLabel.Text = messageText or ""
 	messageLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
 	messageLabel.Font = Enum.Font.Arial
-	messageLabel.FontSize = Enum.FontSize.Size14
+	messageLabel.TextSize = 14
 	messageLabel.TextWrapped = true
 	messageLabel.TextYAlignment = Enum.TextYAlignment.Top
 	messageLabel.BackgroundTransparency = 1
 	messageLabel.Parent = messageFrame
 
-	-- OK button
 	local okButton = Instance.new("TextButton")
 	okButton.Size = UDim2.new(0, 100, 0, 30)
 	okButton.Position = UDim2.new(0.5, -50, 1, -40)
 	okButton.Text = "OK"
 	okButton.TextColor3 = Color3.new(1, 1, 1)
 	okButton.Font = Enum.Font.ArialBold
-	okButton.FontSize = Enum.FontSize.Size14
+	okButton.TextSize = 14
 
 	if alertType == "warning" then
 		okButton.BackgroundColor3 = Color3.new(0.8, 0.6, 0)
@@ -537,9 +646,8 @@ local function createAlertGui(parent, title, messageText, duration, alertType)
 	okButton.BorderSizePixel = 0
 	okButton.Parent = mainFrame
 
-	-- Button hover effects
 	okButton.MouseEnter:Connect(function()
-		okButton.BackgroundColor3 = okButton.BackgroundColor3 + Color3.new(0.1, 0.1, 0.1)
+		okButton.BackgroundColor3 = okButton.BackgroundColor3:Lerp(Color3.new(1, 1, 1), 0.1)
 	end)
 
 	okButton.MouseLeave:Connect(function()
@@ -556,7 +664,8 @@ local function createAlertGui(parent, title, messageText, duration, alertType)
 		gui:Destroy()
 	end)
 
-	-- Auto-close after duration
+	gui.Parent = parent
+
 	spawn(function()
 		wait(duration)
 		if gui.Parent then
@@ -564,47 +673,124 @@ local function createAlertGui(parent, title, messageText, duration, alertType)
 		end
 	end)
 
-	gui.Parent = parent
 	return gui
 end
 
 local function message(title, msg, players, duration, messageType)
-	if not players then return end
-	for _, plr in pairs(players) do
-		if plr and plr:FindFirstChild("PlayerGui") then
-			createMessageGui(plr.PlayerGui, title, msg, duration or 5, messageType or "info")
+	if not players or #players == 0 then return end
+	duration = duration or 5
+	messageType = messageType or "info"
+
+	for _, plr in ipairs(players) do
+		if plr and plr:IsA("Player") then
+			local success, err = pcall(function()
+				local playerGui = plr:FindFirstChild("PlayerGui")
+				if playerGui then
+					createMessageGui(playerGui, title, msg, duration, messageType)
+				end
+			end)
+			if not success then
+				warn("Failed to send message to " .. plr.Name .. ": " .. err)
+			end
 		end
 	end
 end
 
 local function hint(msg, players, duration)
-	if not players then return end
-	for _, plr in pairs(players) do
-		if plr and plr:FindFirstChild("PlayerGui") then
-			createHintGui(plr.PlayerGui, msg, duration or 3)
+	if not players or #players == 0 then return end
+	duration = duration or 3
+
+	for _, plr in ipairs(players) do
+		if plr and plr:IsA("Player") then
+			local success, err = pcall(function()
+				local playerGui = plr:FindFirstChild("PlayerGui")
+				if playerGui then
+					createHintGui(playerGui, msg, duration)
+				end
+			end)
+			if not success then
+				warn("Failed to send hint to " .. plr.Name .. ": " .. err)
+			end
 		end
 	end
 end
 
 local function toast(msg, players, duration, toastType)
-	if not players then return end
-	for _, plr in pairs(players) do
-		if plr and plr:FindFirstChild("PlayerGui") then
-			createToastGui(plr.PlayerGui, msg, duration or 3, toastType or "info")
+	if not players or #players == 0 then return end
+	duration = duration or 3
+	toastType = toastType or "info"
+
+	for _, plr in ipairs(players) do
+		if plr and plr:IsA("Player") then
+			local success, err = pcall(function()
+				local playerGui = plr:FindFirstChild("PlayerGui")
+				if playerGui then
+					createToastGui(playerGui, msg, duration, toastType)
+				end
+			end)
+			if not success then
+				warn("Failed to send toast to " .. plr.Name .. ": " .. err)
+			end
 		end
 	end
 end
 
 local function alert(title, msg, players, alertType)
-	if not players then return end
-	for _, plr in pairs(players) do
-		if plr and plr:FindFirstChild("PlayerGui") then
-			createAlertGui(plr.PlayerGui, title, msg, 5, alertType or "info")
+	if not players or #players == 0 then return end
+	alertType = alertType or "info"
+
+	for _, plr in ipairs(players) do
+		if plr and plr:IsA("Player") then
+			local success, err = pcall(function()
+				local playerGui = plr:FindFirstChild("PlayerGui")
+				if playerGui then
+					createAlertGui(playerGui, title, msg, 5, alertType)
+				end
+			end)
+			if not success then
+				warn("Failed to send alert to " .. plr.Name .. ": " .. err)
+			end
 		end
 	end
 end
 
--- LOGGING SYSTEM
+game.Players.PlayerRemoving:Connect(function(player)
+	if player then
+		local playerName = player.Name
+		rateLimit[playerName] = nil
+		groupCache[player.UserId] = nil
+
+		-- Clean up pending commands
+		for cmdId, data in pairs(pendingCommands) do
+			if data.player == player then
+				pendingCommands[cmdId] = nil
+			end
+		end
+	end
+end)
+
+spawn(function()
+	while wait(60) do
+		local now = tick()
+
+		for name, data in pairs(rateLimit) do
+			if now - data.time > 300 then
+				rateLimit[name] = nil
+			end
+		end
+
+		for cmdId, data in pairs(pendingCommands) do
+			if now - data.time > 30 then
+				pendingCommands[cmdId] = nil
+			end
+		end
+
+		if #commandLogs > 100 then
+			table.remove(commandLogs, 1)
+		end
+	end
+end)
+----------------------------
 local function logCommand(plr, command, args)
 	table.insert(commandLogs, {
 		player = plr.Name,
@@ -617,10 +803,8 @@ local function logCommand(plr, command, args)
 	end
 end
 
--- COMMAND SYSTEM (600+ COMMANDS)
 local commands = {}
 
--- === BASIC PLAYER MANAGEMENT ===
 commands["kick"] = function(plr, args)
 	if #args < 1 then 
 		toast("Usage: !kick [player] [reason]", {plr}, 3, "error")
@@ -1217,14 +1401,22 @@ commands["unsmoke"] = function(plr, args)
 end
 
 commands["shutdown"] = function(plr, args)
-	alert("SERVER SHUTDOWN", "The server is shutting down in 5 seconds...\n\nInitiated by: "..plr.Name, game.Players:GetPlayers(), "error")
-	wait(5)
-	for _, player in pairs(game.Players:GetPlayers()) do
-		if player ~= plr then
-			player:Kick("Server shutdown by "..plr.Name)
-		end
+	alert(
+		"SERVER SHUTDOWN",
+		"The server is shutting down in 5 seconds...\n\nInitiated by: " .. plr.Name,
+		game.Players:GetPlayers(),
+		"error"
+	)
+
+	task.wait(5)
+
+	for _, player in ipairs(game.Players:GetPlayers()) do
+		player:Kick("Server shutdown by " .. plr.Name)
 	end
-	toast("Server shutdown complete", {plr}, 3, "error")
+
+	toast("Server shutdown complete", { plr }, 3, "error")
+
+	game:Shutdown() -- MUST be inside the function
 end
 
 commands["rejoin"] = function(plr, args)
@@ -1423,30 +1615,70 @@ end
 
 commands["fly"] = function(plr, args)
 	local targets = getPlayers(plr, args[1] or "me")
+
 	for _, target in pairs(targets) do
-		if target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-			local bodyVelocity = Instance.new("BodyVelocity")
-			bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-			bodyVelocity.MaxForce = Vector3.new(0, 9.8 * target.Character.HumanoidRootPart:GetMass(), 0)
-			bodyVelocity.Parent = target.Character.HumanoidRootPart
-			toast(target.Name.." can now fly", {plr}, 3, "success")
+		local char = target.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+		if hrp and hum and not hrp:FindFirstChild("FlyVelocity") then
+			hum.PlatformStand = true
+
+			local bv = Instance.new("BodyVelocity")
+			bv.Name = "FlyVelocity"
+			bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+			bv.Velocity = Vector3.zero
+			bv.Parent = hrp
+
+			local bg = Instance.new("BodyGyro")
+			bg.Name = "FlyGyro"
+			bg.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+			bg.P = 9e4
+			bg.CFrame = hrp.CFrame
+			bg.Parent = hrp
+
+			task.spawn(function()
+				while bv.Parent and hum.Health > 0 do
+					local cam = workspace.CurrentCamera
+					if cam then
+						bg.CFrame = cam.CFrame
+						bv.Velocity = cam.CFrame.LookVector * 60
+					end
+					task.wait()
+				end
+			end)
+
+			toast(target.Name .. " can now fly", {plr}, 3, "success")
 		end
 	end
 end
 
+
 commands["unfly"] = function(plr, args)
 	local targets = getPlayers(plr, args[1] or "me")
+
 	for _, target in pairs(targets) do
-		if target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-			for _, obj in pairs(target.Character.HumanoidRootPart:GetChildren()) do
-				if obj:IsA("BodyVelocity") then
-					obj:Destroy()
-				end
+		local char = target.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+		if hrp then
+			if hrp:FindFirstChild("FlyVelocity") then
+				hrp.FlyVelocity:Destroy()
 			end
-			toast("Flying disabled for "..target.Name, {plr}, 3, "success")
+			if hrp:FindFirstChild("FlyGyro") then
+				hrp.FlyGyro:Destroy()
+			end
 		end
+
+		if hum then
+			hum.PlatformStand = false
+		end
+
+		toast("Flying disabled for " .. target.Name, {plr}, 3, "success")
 	end
 end
+
 
 commands["spin"] = function(plr, args)
 	local targets = getPlayers(plr, args[1] or "me")
@@ -1822,6 +2054,422 @@ commands["promote"] = function(plr, args)
 	end
 end
 
+
+-- === MUSIC COMMANDS ===
+commands["music"] = function(plr, args)
+	if not args or #args < 1 then 
+		toast("Usage: !music [id] or !music stop", {plr}, 3, "error")
+		return 
+	end
+
+	if args[1]:lower() == "stop" then
+		for _, sound in pairs(workspace:GetDescendants()) do
+			if sound:IsA("Sound") and sound.Name == "AdminMusic" then
+				sound:Stop()
+				sound:Destroy()
+			end
+		end
+		toast("Music stopped", {plr}, 3, "success")
+		return
+	end
+
+	local soundId = tonumber(args[1])
+	if not soundId then
+		toast("Invalid sound ID", {plr}, 3, "error")
+		return
+	end
+
+	local sound = Instance.new("Sound")
+	sound.Name = "AdminMusic"
+	sound.SoundId = "rbxassetid://" .. soundId
+	sound.Volume = 0.5
+	sound.Looped = true
+	sound.Parent = workspace
+
+	local success, err = pcall(function()
+		sound:Play()
+	end)
+
+	if success then
+		toast("Playing music ID: " .. soundId, {plr}, 3, "success")
+	else
+		sound:Destroy()
+		toast("Failed to play sound: " .. tostring(err), {plr}, 3, "error")
+	end
+end
+
+commands["volume"] = function(plr, args)
+	if not args or #args < 1 then 
+		toast("Usage: !volume [0-10]", {plr}, 3, "error")
+		return 
+	end
+
+	local volume = tonumber(args[1])
+	if not volume or volume < 0 or volume > 10 then
+		toast("Volume must be between 0 and 10", {plr}, 3, "error")
+		return
+	end
+
+	for _, sound in pairs(workspace:GetDescendants()) do
+		if sound:IsA("Sound") and sound.Name == "AdminMusic" then
+			sound.Volume = volume
+		end
+	end
+	toast("Volume set to " .. volume, {plr}, 3, "success")
+end
+
+commands["play"] = function(plr, args)
+	commands["music"](plr, args)
+end
+
+commands["stopmusic"] = function(plr, args)
+	for _, sound in pairs(workspace:GetDescendants()) do
+		if sound:IsA("Sound") and sound.Name == "AdminMusic" then
+			sound:Stop()
+			sound:Destroy()
+		end
+	end
+	toast("All music stopped", {plr}, 3, "success")
+end
+
+commands["pause"] = function(plr, args)
+	for _, sound in pairs(workspace:GetDescendants()) do
+		if sound:IsA("Sound") and sound.Name == "AdminMusic" then
+			sound:Pause()
+		end
+	end
+	toast("Music paused", {plr}, 3, "success")
+end
+
+commands["resume"] = function(plr, args)
+	for _, sound in pairs(workspace:GetDescendants()) do
+		if sound:IsA("Sound") and sound.Name == "AdminMusic" then
+			sound:Play()
+		end
+	end
+	toast("Music resumed", {plr}, 3, "success")
+end
+
+commands["playfor"] = function(plr, args)
+	if not args or #args < 2 then 
+		toast("Usage: !playfor [player] [soundId]", {plr}, 3, "error")
+		return 
+	end
+
+	local targetName = args[1]
+	local soundId = tonumber(args[2])
+	local targets = getPlayers(plr, targetName)
+
+	if #targets == 0 then
+		toast("No player found: " .. targetName, {plr}, 3, "error")
+		return
+	end
+
+	if not soundId then
+		toast("Invalid sound ID", {plr}, 3, "error")
+		return
+	end
+
+	for _, target in pairs(targets) do
+		if target and target:IsA("Player") then
+		
+			for _, sound in pairs(target:GetDescendants()) do
+				if sound:IsA("Sound") and sound.Name == "PlayerMusic" then
+					sound:Destroy()
+				end
+			end
+
+			local sound = Instance.new("Sound")
+			sound.Name = "PlayerMusic"
+			sound.SoundId = "rbxassetid://" .. soundId
+			sound.Volume = 0.5
+			sound.Looped = true
+
+			if target:FindFirstChild("Backpack") then
+				sound.Parent = target.Backpack
+			elseif target.Character then
+				sound.Parent = target.Character
+			else
+				sound.Parent = target
+			end
+
+			local success, err = pcall(function()
+				sound:Play()
+			end)
+
+			if success then
+				toast("Playing music for " .. target.Name, {plr}, 3, "success")
+			else
+				sound:Destroy()
+				toast("Failed to play for " .. target.Name, {plr}, 3, "error")
+			end
+		end
+	end
+end
+
+commands["stopfor"] = function(plr, args)
+	if not args or #args < 1 then 
+		toast("Usage: !stopfor [player]", {plr}, 3, "error")
+		return 
+	end
+
+	local targets = getPlayers(plr, args[1])
+	for _, target in pairs(targets) do
+		if target and target:IsA("Player") then
+			for _, sound in pairs(target:GetDescendants()) do
+				if sound:IsA("Sound") and sound.Name == "PlayerMusic" then
+					sound:Stop()
+					sound:Destroy()
+				end
+			end
+		end
+	end
+	toast("Stopped music for player(s)", {plr}, 3, "success")
+end
+
+commands["ambient"] = function(plr, args)
+	if not args or #args < 1 then 
+		toast("Usage: !ambient [soundId] or !ambient stop", {plr}, 3, "error")
+		return 
+	end
+
+	if args[1]:lower() == "stop" then
+		local lighting = game:GetService("Lighting")
+		for _, sound in pairs(lighting:GetChildren()) do
+			if sound:IsA("Sound") and sound.Name == "AmbientMusic" then
+				sound:Stop()
+				sound:Destroy()
+			end
+		end
+		toast("Ambient music stopped", {plr}, 3, "success")
+		return
+	end
+
+	local soundId = tonumber(args[1])
+	if not soundId then
+		toast("Invalid sound ID", {plr}, 3, "error")
+		return
+	end
+
+	local lighting = game:GetService("Lighting")
+
+	for _, sound in pairs(lighting:GetChildren()) do
+		if sound:IsA("Sound") and sound.Name == "AmbientMusic" then
+			sound:Destroy()
+		end
+	end
+
+	local sound = Instance.new("Sound")
+	sound.Name = "AmbientMusic"
+	sound.SoundId = "rbxassetid://" .. soundId
+	sound.Volume = 0.3
+	sound.Looped = true
+	sound.Parent = lighting
+
+	local success, err = pcall(function()
+		sound:Play()
+	end)
+
+	if success then
+		toast("Playing ambient music ID: " .. soundId, {plr}, 3, "success")
+	else
+		sound:Destroy()
+		toast("Failed to play ambient sound: " .. tostring(err), {plr}, 3, "error")
+	end
+end
+
+commands["musiclist"] = function(plr, args)
+	local musicList = "Popular Music IDs:\n\n"
+	musicList = musicList .. "142376088 - Megalovania\n"
+	musicList = musicList .. "27697743 - Never Gonna Give You Up\n"
+	musicList = musicList .. "184793429 - Wii Theme\n"
+	musicList = musicList .. "137225025 - Caramelldansen\n"
+	musicList = musicList .. "91163979 - Tokyo Drift\n"
+	musicList = musicList .. "32957424 - Crab Rave\n"
+	musicList = musicList .. "45987644 - Nyan Cat\n"
+	musicList = musicList .. "45987645 - Rick Roll\n"
+	musicList = musicList .. "27697229 - Shooting Stars\n"
+	musicList = musicList .. "137226663 - All Star\n"
+	musicList = musicList .. "91163981 - Take On Me\n"
+	musicList = musicList .. "184792875 - Super Mario Bros\n"
+	musicList = musicList .. "142536916 - Among Us Theme\n"
+	musicList = musicList .. "32957590 - Giorno's Theme\n"
+	musicList = musicList .. "45987646 - Roundabout\n\n"
+	musicList = musicList .. "Usage: !music [id] or !play [id]\n"
+	musicList = musicList .. "Stop: !music stop or !stopmusic"
+
+	message("Music Library", musicList, {plr}, 20, "info")
+end
+
+commands["soundat"] = function(plr, args)
+	if not args or #args < 2 then 
+		toast("Usage: !soundat [soundId] [x] [y] [z]", {plr}, 3, "error")
+		return 
+	end
+
+	local soundId = tonumber(args[1])
+	if not soundId then
+		toast("Invalid sound ID", {plr}, 3, "error")
+		return
+	end
+
+	local x = tonumber(args[2]) or 0
+	local y = tonumber(args[3]) or 0
+	local z = tonumber(args[4]) or 0
+
+	local sound = Instance.new("Sound")
+	sound.Name = "PositionalSound"
+	sound.SoundId = "rbxassetid://" .. soundId
+	sound.Volume = 1.0
+	sound.Looped = false
+	sound.MaxDistance = 100
+	sound.RollOffMode = Enum.RollOffMode.Linear
+
+	local part = Instance.new("Part")
+	part.Size = Vector3.new(1, 1, 1)
+	part.Position = Vector3.new(x, y, z)
+	part.Anchored = true
+	part.CanCollide = false
+	part.Transparency = 1
+	part.Name = "SoundEmitter_" .. soundId
+	sound.Parent = part
+	part.Parent = workspace
+
+	local success, err = pcall(function()
+		sound:Play()
+	end)
+
+	if success then
+		toast("Playing sound at position: " .. x .. "," .. y .. "," .. z, {plr}, 3, "success")
+
+		game:GetService("Debris"):AddItem(part, sound.TimeLength + 1)
+	else
+		part:Destroy()
+		toast("Failed to play sound: " .. tostring(err), {plr}, 3, "error")
+	end
+end
+
+commands["fade"] = function(plr, args)
+	if not args or #args < 2 then 
+		toast("Usage: !fade [time] [targetVolume]", {plr}, 3, "error")
+		return 
+	end
+
+	local fadeTime = tonumber(args[1])
+	local targetVolume = tonumber(args[2])
+
+	if not fadeTime or not targetVolume then
+		toast("Invalid fade parameters", {plr}, 3, "error")
+		return
+	end
+
+	for _, sound in pairs(workspace:GetDescendants()) do
+		if sound:IsA("Sound") and sound.Name == "AdminMusic" then
+			local startVolume = sound.Volume
+			local startTime = tick()
+
+			coroutine.wrap(function()
+				while tick() - startTime < fadeTime do
+					local progress = (tick() - startTime) / fadeTime
+					sound.Volume = startVolume + (targetVolume - startVolume) * progress
+					wait(0.1)
+				end
+				sound.Volume = targetVolume
+			end)()
+		end
+	end
+
+	toast("Fading music to volume " .. targetVolume .. " over " .. fadeTime .. " seconds", {plr}, 3, "success")
+end
+
+commands["pcban"] = function(plr, args)
+	if #args < 1 then 
+		toast("Usage: !pcban [player] [reason]", {plr}, 3, "error")
+		return 
+	end
+
+	local targets = getPlayers(plr, args[1])
+	if #targets == 0 then
+		toast("No player found: " .. args[1], {plr}, 3, "warning")
+		return
+	end
+
+	for _, target in pairs(targets) do
+		if target and target:IsA("Player") then
+			if isOwner(target.Name) then
+				toast("Cannot ban " .. target.Name, {plr}, 3, "warning")
+			else
+				local reason = table.concat(args, " ", 2)
+				if reason == "" then
+					reason = "Banned by admin"
+				end
+
+				local success, err = pcall(function()
+					game:GetService("Players"):BanAsync({
+						UserIds = { target.UserId },
+						ApplyToUniverse = true,
+						Duration = -1,
+						DisplayReason = reason,
+						PrivateReason = "Operator: " .. plr.Name .. " | " .. reason,
+						ExcludeAltAccounts = false,
+					})
+				end)
+
+				if success then
+					toast("Permanently banned player: " .. target.Name .. " - Reason: " .. reason, {plr}, 3, "success")
+					target:Kick("You have been permanently banned.\nReason: " .. reason)
+				else
+					toast("Ban failed: " .. tostring(err), {plr}, 3, "error")
+				end
+			end
+		end
+	end
+end
+
+
+
+
+commands["pcunban"] = function(plr, args)
+	if #args < 1 then 
+		toast("Usage: !pcunban [player]", {plr}, 3, "error")
+		return 
+	end
+
+	local playerName = args[1]
+	local userId
+
+	local success, result = pcall(function()
+		return game:GetService("Players"):GetUserIdFromNameAsync(playerName)
+	end)
+
+	if success and result then
+		userId = result
+	else
+		
+		local target = getPlayers(plr, playerName)[1]
+		if target then
+			userId = target.UserId
+		else
+			toast("Could not find player: " .. playerName, {plr}, 3, "error")
+			return
+		end
+	end
+
+	local unbanSuccess, unbanErr = pcall(function()
+		game:GetService("Players"):UnbanAsync({
+			UserIds = { userId },
+			ApplyToUniverse = true,
+		})
+	end)
+
+	if unbanSuccess then
+		toast("Successfully unbanned: " .. playerName, {plr}, 3, "success")
+	else
+		toast("Unban failed: " .. tostring(unbanErr), {plr}, 3, "error")
+	end
+end
+
+
 commands["demote"] = function(plr, args)
 	if #args < 1 then 
 		toast("Usage: !demote [player]", {plr}, 3, "error")
@@ -1907,7 +2555,6 @@ commands["owner"] = function(plr, args)
 	end
 end
 
--- === UTILITY COMMANDS ===
 commands["cmds"] = function(plr, args)
 	local categories = {
 		"=== PLAYER MANAGEMENT ===",
@@ -1967,6 +2614,22 @@ commands["cmds"] = function(plr, args)
 		"!void [player] - Teleport to void",
 		"!center [player] - Teleport to center",
 		"",
+		"=== MUSIC & AUDIO ===",
+		"!music [id] - Play music globally",
+		"!music stop - Stop all music",
+		"!volume [0-10] - Adjust music volume",
+		"!play [id] - Alias for !music",
+		"!stopmusic - Stop all music",
+		"!pause - Pause music",
+		"!resume - Resume music",
+		"!playfor [player] [id] - Play for specific player",
+		"!stopfor [player] - Stop music for player",
+		"!ambient [id] - Play ambient music",
+		"!ambient stop - Stop ambient music",
+		"!musiclist - Show popular music IDs",
+		"!soundat [id] [x] [y] [z] - Play sound at position",
+		"!fade [time] [volume] - Fade music volume",
+		"",
 		"=== ADMIN MANAGEMENT ===",
 		"!promote [player] - Promote to admin",
 		"!demote [player] - Demote admin",
@@ -1988,12 +2651,21 @@ commands["cmds"] = function(plr, args)
 		"!warnings - List warnings",
 		"!clearwarnings [player] - Clear warns",
 		"",
-		"Total Commands: 150+ (More available)"
-	}
-
-	local helpText = "ADMIN SYSTEM V4 - COMMAND LIST\n\n" .. table.concat(categories, "\n")
+		"=== QUICK EXAMPLES ===",
+		"Music: !music 142376088 (Megalovania)",
+		"Music: !music 27697743 (Rickroll)",
+		"Volume: !volume 5 (50% volume)",
+		"Stop: !music stop or !stopmusic",
+		"List: !musiclist (Show all music IDs)",
+		"=== PERMANENT BANS (Official API) ===",
+		"!pcban [player] [duration] [reason] - Permanent cross-game ban",
+		"!pcunban [player] - Remove permanent ban",
+		"",
+}
+	local helpText = "admin system - commands LIST\n\n" .. table.concat(categories, "\n")
 	message("Command Help", helpText, {plr}, 30, "info")
 end
+
 
 commands["help"] = commands["cmds"]
 
@@ -2215,7 +2887,7 @@ end
 
 local function onPlayerChatted(plr)
 	plr.Chatted:Connect(function(msg)
-		-- Security checks
+
 		if #msg > maxCommandLength then 
 			toast("Message too long!", {plr}, 3, "error")
 			return 
@@ -2238,9 +2910,9 @@ local function onPlayerChatted(plr)
 
 			if commands[cmd] then
 				if isAdmin(plr.Name) or isOwner(plr.Name) then
-					-- Log command
+					
 					logCommand(plr, cmd, split)
-					-- Execute command
+					
 					local success, err = pcall(function()
 						commands[cmd](plr, split)
 					end)
@@ -2258,11 +2930,9 @@ local function onPlayerChatted(plr)
 	end)
 end
 
--- PLAYER JOIN HANDLER
 local function setupPlayer(plr)
 	if not plr then return end
 
-	-- Safe wrapper for function calls
 	local function safeCall(fn, ...)
 		if type(fn) == "function" then
 			local success, result = pcall(fn, ...)
@@ -2273,14 +2943,12 @@ local function setupPlayer(plr)
 		return nil
 	end
 
-	-- Check if banned
 	local banned = safeCall(isBanned, plr.Name)
 	if banned then
 		plr:Kick("You are banned from this server.")
 		return
 	end
 
-	-- Assign VIP / group admin if applicable
 	local groupAdmin = safeCall(isGroupAdmin, plr)
 	local admin = safeCall(isAdmin, plr.Name)
 	if groupAdmin and not admin then
@@ -2288,7 +2956,6 @@ local function setupPlayer(plr)
 		admin = true
 	end
 
-	-- Check VIP badge
 	if vipAdminBadgeId and vipAdminBadgeId > 0 then
 		local success, hasBadge = pcall(function()
 			return game:GetService("BadgeService"):UserHasBadge(plr.UserId, vipAdminBadgeId)
@@ -2299,43 +2966,33 @@ local function setupPlayer(plr)
 		end
 	end
 
-	-- Welcome admin
 	if admin then
 		safeCall(toast, "Welcome back, "..plr.Name.."!\nType !cmds for commands", {plr}, 5, "success")
 	end
 
-	-- Connect chat listener
 	safeCall(onPlayerChatted, plr)
 end
 
--- INITIALIZE EXISTING PLAYERS
 for _, plr in pairs(game.Players:GetPlayers()) do
 	setupPlayer(plr)
 end
 
--- PLAYER ADDED
 game.Players.PlayerAdded:Connect(setupPlayer)
 
--- CLEANUP ON PLAYER LEAVE
 game.Players.PlayerRemoving:Connect(function(plr)
 	rateLimit[plr.Name] = nil
 	playerData[plr.Name] = nil
 end)
 
--- SYSTEM STARTUP
-print("=== SAFE ADMIN SYSTEM V4 LOADED ===")
-print("Commands: 150+ (with full functionality)")
 print("Owner: " .. table.concat(owners, ", "))
 print("Prefix: " .. prefix)
 
--- Send startup message to all players
 for _, plr in pairs(game.Players:GetPlayers()) do
 	if plr and plr:FindFirstChild("PlayerGui") then
 		createHintGui(plr.PlayerGui, "Admin System V4 loaded! Type !cmds for commands", 8)
 	end
 end
 
--- Count total commands
 function countTable(t)
 	local count = 0
 	for _ in pairs(t) do
@@ -2344,5 +3001,5 @@ function countTable(t)
 	return count
 end
 
-print("Total commands loaded: " .. countTable(commands))
-toast("Admin System V4 loaded with "..countTable(commands).." commands", game.Players:GetPlayers(), 5, "success")
+print("loaded: " .. countTable(commands))
+toast("loaded with "..countTable(commands).." commands", game.Players:GetPlayers(), 5, "success")
