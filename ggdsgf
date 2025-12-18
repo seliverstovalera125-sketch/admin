@@ -1,0 +1,2074 @@
+if IY_LOADED and not _G.IY_DEBUG == true then
+	return
+end
+
+pcall(function() getgenv().IY_LOADED = true end)
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+function missing(t, f, fallback)
+	if type(f) == t then return f end
+	return fallback
+end
+
+cloneref = missing("function", cloneref, function(...) return ... end)
+sethidden = missing("function", sethiddenproperty or set_hidden_property or set_hidden_prop)
+gethidden = missing("function", gethiddenproperty or get_hidden_property or get_hidden_prop)
+queueteleport = missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
+httprequest = missing("function", request or http_request or (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request))
+everyClipboard = missing("function", setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set))
+firetouchinterest = missing("function", firetouchinterest)
+waxwritefile, waxreadfile = writefile, readfile
+writefile = missing("function", waxwritefile) and function(file, data, safe)
+	if safe == true then return pcall(waxwritefile, file, data) end
+	waxwritefile(file, data)
+end
+readfile = missing("function", waxreadfile) and function(file, safe)
+	if safe == true then return pcall(waxreadfile, file) end
+	return waxreadfile(file)
+end
+isfile = missing("function", isfile, readfile and function(file)
+	local success, result = pcall(function()
+		return readfile(file)
+	end)
+	return success and result ~= nil and result ~= ""
+end)
+makefolder = missing("function", makefolder)
+isfolder = missing("function", isfolder)
+waxgetcustomasset = missing("function", getcustomasset or getsynasset)
+hookfunction = missing("function", hookfunction)
+hookmetamethod = missing("function", hookmetamethod)
+getnamecallmethod = missing("function", getnamecallmethod or get_namecall_method)
+checkcaller = missing("function", checkcaller, function() return false end)
+newcclosure = missing("function", newcclosure)
+getgc = missing("function", getgc or get_gc_objects)
+setthreadidentity = missing("function", setthreadidentity or (syn and syn.set_thread_identity) or syn_context_set or setthreadcontext)
+replicatesignal = missing("function", replicatesignal)
+getconnections = missing("function", getconnections or get_signal_cons)
+
+Services = setmetatable({}, {
+	__index = function(self, name)
+		local success, cache = pcall(function()
+			return cloneref(game:GetService(name))
+		end)
+		if success then
+			rawset(self, name, cache)
+			return cache
+		else
+			error("Invalid Service: " .. tostring(name))
+		end
+	end
+})
+
+COREGUI = Services.CoreGui
+Players = Services.Players
+UserInputService = Services.UserInputService
+TweenService = Services.TweenService
+HttpService = Services.HttpService
+MarketplaceService = Services.MarketplaceService
+RunService = Services.RunService
+TeleportService = Services.TeleportService
+StarterGui = Services.StarterGui
+GuiService = Services.GuiService
+Lighting = Services.Lighting
+ContextActionService = Services.ContextActionService
+ReplicatedStorage = Services.ReplicatedStorage
+GroupService = Services.GroupService
+PathService = Services.PathfindingService
+SoundService = Services.SoundService
+Teams = Services.Teams
+StarterPlayer = Services.StarterPlayer
+InsertService = Services.InsertService
+ChatService = Services.Chat
+ProximityPromptService = Services.ProximityPromptService
+ContentProvider = Services.ContentProvider
+StatsService = Services.Stats
+MaterialService = Services.MaterialService
+AvatarEditorService = Services.AvatarEditorService
+TextService = Services.TextService
+TextChatService = Services.TextChatService
+CaptureService = Services.CaptureService
+VoiceChatService = Services.VoiceChatService
+SocialService = Services.SocialService
+
+IYMouse = cloneref(Players.LocalPlayer:GetMouse())
+PlayerGui = cloneref(Players.LocalPlayer:FindFirstChildWhichIsA("PlayerGui"))
+PlaceId, JobId = game.PlaceId, game.JobId
+
+IsOnMobile = false
+xpcall(function()
+	IsOnMobile = table.find({Enum.Platform.Android, Enum.Platform.IOS}, UserInputService:GetPlatform())
+end, function()
+	IsOnMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+end)
+isLegacyChat = TextChatService.ChatVersion == Enum.ChatVersion.LegacyChatService
+
+-- Random string generator
+function randomString(length)
+	length = length or 8
+	local chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	local str = ""
+	for i = 1, length do
+		str = str .. chars:sub(math.random(1, #chars), math.random(1, #chars))
+	end
+	return str
+end
+
+local PARENT
+if get_hidden_gui then
+	PARENT = get_hidden_gui()
+elseif gethui then
+	PARENT = gethui()
+end
+
+if not PARENT then
+	local Main = Instance.new("ScreenGui")
+	Main.Name = randomString()
+	Main.ResetOnSpawn = false
+
+	if syn and syn.protect_gui then
+		syn.protect_gui(Main)
+	end
+
+	Main.Parent = game:GetService("CoreGui") or Players.LocalPlayer:WaitForChild("PlayerGui")
+	PARENT = Main
+end
+
+local shade1 = {}
+local shade2 = {}
+local shade3 = {}
+local text1 = {}
+local text2 = {}
+local scroll = {}
+
+local iyassets = {
+	["infiniteyield/assets/bindsandplugins.png"] = "rbxassetid://5147695474",
+	["infiniteyield/assets/close.png"] = "rbxassetid://5054663650",
+	["infiniteyield/assets/editaliases.png"] = "rbxassetid://5147488658",
+	["infiniteyield/assets/editkeybinds.png"] = "rbxassetid://129697930",
+	["infiniteyield/assets/edittheme.png"] = "rbxassetid://4911962991",
+	["infiniteyield/assets/editwaypoints.png"] = "rbxassetid://5147488592",
+	["infiniteyield/assets/imgstudiopluginlogo.png"] = "rbxassetid://4113050383",
+	["infiniteyield/assets/logo.png"] = "rbxassetid://1352543873",
+	["infiniteyield/assets/minimize.png"] = "rbxassetid://2406617031",
+	["infiniteyield/assets/pin.png"] = "rbxassetid://6234691350",
+	["infiniteyield/assets/reference.png"] = "rbxassetid://3523243755",
+	["infiniteyield/assets/settings.png"] = "rbxassetid://1204397029"
+}
+
+local function getcustomasset(asset)
+	if waxgetcustomasset then
+		local success, result = pcall(function()
+			return waxgetcustomasset(asset)
+		end)
+		if success and result ~= nil and result ~= "" then
+			return result
+		end
+	end
+	return iyassets[asset] or "rbxassetid://0"
+end
+
+-- Create main GUI elements
+local ScaledHolder = Instance.new("Frame")
+local Scale = Instance.new("UIScale")
+local Holder = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local Cmdbar = Instance.new("TextBox")
+local CMDsF = Instance.new("ScrollingFrame")
+local cmdListLayout = Instance.new("UIListLayout")
+local SettingsButton = Instance.new("ImageButton")
+local ReferenceButton = Instance.new("ImageButton")
+local Settings = Instance.new("Frame")
+local SettingsHolder = Instance.new("ScrollingFrame")
+
+-- Initialize current colors
+local currentShade1 = Color3.fromRGB(36, 36, 37)
+local currentShade2 = Color3.fromRGB(46, 46, 47)
+local currentShade3 = Color3.fromRGB(78, 78, 79)
+local currentText1 = Color3.new(1, 1, 1)
+local currentText2 = Color3.new(0, 0, 0)
+local currentScroll = Color3.fromRGB(78, 78, 79)
+
+-- Default settings
+local defaultGuiScale = IsOnMobile and 0.9 or 1
+local defaultsettings = {
+	prefix = ';';
+	StayOpen = false;
+	guiScale = defaultGuiScale;
+	espTransparency = 0.3;
+	keepIY = true;
+	logsEnabled = false;
+	jLogsEnabled = false;
+	aliases = {};
+	binds = {};
+	WayPoints = {};
+	PluginsTable = {};
+	currentShade1 = {currentShade1.R, currentShade1.G, currentShade1.B};
+	currentShade2 = {currentShade2.R, currentShade2.G, currentShade2.B};
+	currentShade3 = {currentShade3.R, currentShade3.G, currentShade3.B};
+	currentText1 = {currentText1.R, currentText1.G, currentText1.B};
+	currentText2 = {currentText2.R, currentText2.G, currentText2.B};
+	currentScroll = {currentScroll.R, currentScroll.G, currentScroll.B};
+	eventBinds = ""
+}
+
+-- Global variables
+local prefix = defaultsettings.prefix
+local StayOpen = defaultsettings.StayOpen
+local guiScale = defaultsettings.guiScale
+local KeepInfYield = defaultsettings.keepIY
+local espTransparency = defaultsettings.espTransparency
+local logsEnabled = defaultsettings.logsEnabled
+local jLogsEnabled = defaultsettings.jLogsEnabled
+local logsWebhook = nil
+local aliases = defaultsettings.aliases
+local binds = defaultsettings.binds
+local AllWaypoints = {}
+local WayPoints = {}
+local pWayPoints = {}
+local PluginsTable = defaultsettings.PluginsTable
+local spawnCmds = {}
+local ESPenabled = false
+local CHMSenabled = false
+local viewing = nil
+local viewDied = nil
+local viewChanged = nil
+local cmds = {}
+local customAlias = {}
+
+-- Create GUI
+ScaledHolder.Name = randomString()
+ScaledHolder.Size = UDim2.fromScale(1, 1)
+ScaledHolder.BackgroundTransparency = 1
+ScaledHolder.Parent = PARENT
+
+Scale.Parent = ScaledHolder
+Scale.Scale = guiScale
+
+Holder.Name = randomString()
+Holder.Parent = ScaledHolder
+Holder.Active = true
+Holder.BackgroundColor3 = currentShade2
+Holder.BorderSizePixel = 0
+Holder.Position = UDim2.new(1, -250, 1, -220)
+Holder.Size = UDim2.new(0, 250, 0, 220)
+Holder.ZIndex = 10
+table.insert(shade2, Holder)
+
+Title.Name = "Title"
+Title.Parent = Holder
+Title.Active = true
+Title.BackgroundColor3 = currentShade1
+Title.BorderSizePixel = 0
+Title.Size = UDim2.new(0, 250, 0, 20)
+Title.Font = Enum.Font.SourceSans
+Title.TextSize = 18
+Title.Text = "Infinite Yield FE"
+Title.TextColor3 = currentText1
+Title.ZIndex = 10
+table.insert(shade1, Title)
+table.insert(text1, Title)
+
+Cmdbar.Name = "Cmdbar"
+Cmdbar.Parent = Holder
+Cmdbar.BackgroundTransparency = 1
+Cmdbar.BorderSizePixel = 0
+Cmdbar.Position = UDim2.new(0, 5, 0, 20)
+Cmdbar.Size = UDim2.new(0, 240, 0, 25)
+Cmdbar.Font = Enum.Font.SourceSans
+Cmdbar.TextSize = 18
+Cmdbar.TextXAlignment = Enum.TextXAlignment.Left
+Cmdbar.TextColor3 = currentText1
+Cmdbar.Text = ""
+Cmdbar.ZIndex = 10
+Cmdbar.PlaceholderText = "Command Bar (" .. prefix .. ")"
+
+CMDsF.Name = "CMDs"
+CMDsF.Parent = Holder
+CMDsF.BackgroundTransparency = 1
+CMDsF.BorderSizePixel = 0
+CMDsF.Position = UDim2.new(0, 5, 0, 45)
+CMDsF.Size = UDim2.new(0, 245, 0, 175)
+CMDsF.ScrollBarImageColor3 = currentScroll
+CMDsF.BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
+CMDsF.CanvasSize = UDim2.new(0, 0, 0, 0)
+CMDsF.MidImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
+CMDsF.ScrollBarThickness = 8
+CMDsF.TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
+CMDsF.VerticalScrollBarInset = 'Always'
+CMDsF.ZIndex = 10
+table.insert(scroll, CMDsF)
+
+cmdListLayout.Parent = CMDsF
+cmdListLayout.SortOrder = Enum.SortOrder.Name
+
+SettingsButton.Name = "SettingsButton"
+SettingsButton.Parent = Holder
+SettingsButton.BackgroundTransparency = 1
+SettingsButton.Position = UDim2.new(0, 230, 0, 0)
+SettingsButton.Size = UDim2.new(0, 20, 0, 20)
+SettingsButton.Image = getcustomasset("infiniteyield/assets/settings.png")
+SettingsButton.ZIndex = 10
+
+ReferenceButton.Name = "ReferenceButton"
+ReferenceButton.Parent = Holder
+ReferenceButton.BackgroundTransparency = 1
+ReferenceButton.Position = UDim2.new(0, 212, 0, 2)
+ReferenceButton.Size = UDim2.new(0, 16, 0, 16)
+ReferenceButton.Image = getcustomasset("infiniteyield/assets/reference.png")
+ReferenceButton.ZIndex = 10
+
+Settings.Name = "Settings"
+Settings.Parent = Holder
+Settings.Active = true
+Settings.BackgroundColor3 = currentShade1
+Settings.BorderSizePixel = 0
+Settings.Position = UDim2.new(0, 0, 0, 220)
+Settings.Size = UDim2.new(0, 250, 0, 175)
+Settings.ZIndex = 10
+table.insert(shade1, Settings)
+
+SettingsHolder.Name = "Holder"
+SettingsHolder.Parent = Settings
+SettingsHolder.BackgroundTransparency = 1
+SettingsHolder.BorderSizePixel = 0
+SettingsHolder.Size = UDim2.new(1, 0, 1, 0)
+SettingsHolder.ScrollBarImageColor3 = currentScroll
+SettingsHolder.BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
+SettingsHolder.CanvasSize = UDim2.new(0, 0, 0, 235)
+SettingsHolder.MidImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
+SettingsHolder.ScrollBarThickness = 8
+SettingsHolder.TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png"
+SettingsHolder.VerticalScrollBarInset = 'Always'
+SettingsHolder.ZIndex = 10
+table.insert(scroll, SettingsHolder)
+
+-- Helper functions
+function writefileExploit()
+	return writefile ~= nil
+end
+
+function readfileExploit()
+	return readfile ~= nil
+end
+
+function isNumber(str)
+	return tonumber(str) ~= nil or str == 'inf'
+end
+
+function vtype(o, t)
+	if o == nil then return false end
+	if type(o) == "userdata" then return typeof(o) == t end
+	return type(o) == t
+end
+
+function getRoot(char)
+	local rootPart = char:FindFirstChild('HumanoidRootPart') or char:FindFirstChild('Torso') or char:FindFirstChild('UpperTorso')
+	return rootPart
+end
+
+function toClipboard(txt)
+	if everyClipboard then
+		everyClipboard(tostring(txt))
+		notify("Clipboard", "Copied to clipboard")
+	else
+		notify("Clipboard", "Your exploit doesn't have the ability to use the clipboard")
+	end
+end
+
+function chatMessage(str)
+	str = tostring(str)
+	if not isLegacyChat then
+		if TextChatService.TextChannels.RBXGeneral then
+			TextChatService.TextChannels.RBXGeneral:SendAsync(str)
+		end
+	else
+		if ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents") then
+			ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(str, "All")
+		end
+	end
+end
+
+function getHierarchy(obj)
+	local fullname
+	local period
+
+	if string.find(obj.Name, ' ') then
+		fullname = '["' .. obj.Name .. '"]'
+		period = false
+	else
+		fullname = obj.Name
+		period = true
+	end
+
+	local getS = obj
+	local parent = obj
+	local service = ''
+
+	if getS.Parent ~= game then
+		repeat
+			getS = getS.Parent
+			service = getS.ClassName
+		until getS.Parent == game
+	end
+
+	if parent.Parent ~= getS then
+		repeat
+			parent = parent.Parent
+			if string.find(tostring(parent), ' ') then
+				if period then
+					fullname = '["' .. parent.Name .. '"].' .. fullname
+				else
+					fullname = '["' .. parent.Name .. '"]' .. fullname
+				end
+				period = false
+			else
+				if period then
+					fullname = parent.Name .. '.' .. fullname
+				else
+					fullname = parent.Name .. '' .. fullname
+				end
+				period = true
+			end
+		until parent.Parent == getS
+	elseif string.find(tostring(parent), ' ') then
+		fullname = '["' .. parent.Name .. '"]'
+		period = false
+	end
+
+	if period then
+		return 'game:GetService("' .. service .. '").' .. fullname
+	else
+		return 'game:GetService("' .. service .. '")' .. fullname
+	end
+end
+
+local cooldown = false
+
+function writefileCooldown(name, data)
+	task.spawn(function()
+		if not cooldown then
+			cooldown = true
+			if writefile then
+				local success = pcall(writefile, name, data)
+				if not success then
+					warn("Failed to write file:", name)
+				end
+			end
+		else
+			repeat wait() until cooldown == false
+			writefileCooldown(name, data)
+		end
+		wait(3)
+		cooldown = false
+	end)
+end
+
+function dragGUI(gui)
+	task.spawn(function()
+		local dragging
+		local dragInput
+		local dragStart = Vector3.new(0, 0, 0)
+		local startPos
+		local function update(input)
+			local delta = input.Position - dragStart
+			local Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+			TweenService:Create(gui, TweenInfo.new(.20), {Position = Position}):Play()
+		end
+		gui.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				dragging = true
+				dragStart = input.Position
+				startPos = gui.Position
+
+				input.Changed:Connect(function()
+					if input.UserInputState == Enum.UserInputState.End then
+						dragging = false
+					end
+				end)
+			end
+		end)
+		gui.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+				dragInput = input
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(input)
+			if input == dragInput and dragging then
+				update(input)
+			end
+		end)
+	end)
+end
+
+function Time()
+	local HOUR = math.floor((tick() % 86400) / 3600)
+	local MINUTE = math.floor((tick() % 3600) / 60)
+	local SECOND = math.floor(tick() % 60)
+	local AP = HOUR > 11 and 'PM' or 'AM'
+	HOUR = (HOUR % 12 == 0 and 12 or HOUR % 12)
+	HOUR = HOUR < 10 and '0' .. HOUR or HOUR
+	MINUTE = MINUTE < 10 and '0' .. MINUTE or MINUTE
+	SECOND = SECOND < 10 and '0' .. SECOND or SECOND
+	return HOUR .. ':' .. MINUTE .. ':' .. SECOND .. ' ' .. AP
+end
+
+-- Notify function
+local notifyCount = 0
+local pinNotification = nil
+function notify(text, text2, length)
+	task.spawn(function()
+		local Notification
+		local Title_2
+		local Text_2
+		local CloseButton
+		local PinButton
+
+		-- Create notification frame if it doesn't exist
+		if not ScaledHolder:FindFirstChild("Notification") then
+			Notification = Instance.new("Frame")
+			Title_2 = Instance.new("TextLabel")
+			Text_2 = Instance.new("TextLabel")
+			CloseButton = Instance.new("TextButton")
+			local CloseImage = Instance.new("ImageLabel")
+			PinButton = Instance.new("TextButton")
+			local PinImage = Instance.new("ImageLabel")
+
+			Notification.Name = "Notification"
+			Notification.Parent = ScaledHolder
+			Notification.BackgroundColor3 = currentShade1
+			Notification.BorderSizePixel = 0
+			Notification.Position = UDim2.new(1, -270, 1, 20)
+			Notification.Size = UDim2.new(0, 250, 0, 100)
+			Notification.ZIndex = 10
+			table.insert(shade1, Notification)
+
+			Title_2.Name = "Title"
+			Title_2.Parent = Notification
+			Title_2.BackgroundColor3 = currentShade2
+			Title_2.BorderSizePixel = 0
+			Title_2.Size = UDim2.new(0, 250, 0, 20)
+			Title_2.Font = Enum.Font.SourceSans
+			Title_2.TextSize = 14
+			Title_2.Text = "Notification Title"
+			Title_2.TextColor3 = currentText1
+			Title_2.ZIndex = 10
+			table.insert(shade2, Title_2)
+			table.insert(text1, Title_2)
+
+			Text_2.Name = "Text"
+			Text_2.Parent = Notification
+			Text_2.BackgroundTransparency = 1
+			Text_2.BorderSizePixel = 0
+			Text_2.Position = UDim2.new(0, 5, 0, 25)
+			Text_2.Size = UDim2.new(0, 240, 0, 75)
+			Text_2.Font = Enum.Font.SourceSans
+			Text_2.TextSize = 16
+			Text_2.Text = "Notification Text"
+			Text_2.TextColor3 = currentText1
+			Text_2.TextWrapped = true
+			Text_2.ZIndex = 10
+			table.insert(text1, Text_2)
+
+			CloseButton.Name = "CloseButton"
+			CloseButton.Parent = Notification
+			CloseButton.BackgroundTransparency = 1
+			CloseButton.Position = UDim2.new(1, -20, 0, 0)
+			CloseButton.Size = UDim2.new(0, 20, 0, 20)
+			CloseButton.Text = ""
+			CloseButton.ZIndex = 10
+
+			CloseImage.Parent = CloseButton
+			CloseImage.BackgroundColor3 = Color3.new(1, 1, 1)
+			CloseImage.BackgroundTransparency = 1
+			CloseImage.Position = UDim2.new(0, 5, 0, 5)
+			CloseImage.Size = UDim2.new(0, 10, 0, 10)
+			CloseImage.Image = getcustomasset("infiniteyield/assets/close.png")
+			CloseImage.ZIndex = 10
+
+			PinButton.Name = "PinButton"
+			PinButton.Parent = Notification
+			PinButton.BackgroundTransparency = 1
+			PinButton.Size = UDim2.new(0, 20, 0, 20)
+			PinButton.ZIndex = 10
+			PinButton.Text = ""
+
+			PinImage.Parent = PinButton
+			PinImage.BackgroundColor3 = Color3.new(1, 1, 1)
+			PinImage.BackgroundTransparency = 1
+			PinImage.Position = UDim2.new(0, 3, 0, 3)
+			PinImage.Size = UDim2.new(0, 14, 0, 14)
+			PinImage.ZIndex = 10
+			PinImage.Image = getcustomasset("infiniteyield/assets/pin.png")
+		else
+			Notification = ScaledHolder:FindFirstChild("Notification")
+			Title_2 = Notification:FindFirstChild("Title")
+			Text_2 = Notification:FindFirstChild("Text")
+			CloseButton = Notification:FindFirstChild("CloseButton")
+			PinButton = Notification:FindFirstChild("PinButton")
+		end
+
+		local LnotifyCount = notifyCount + 1
+		local notificationPinned = false
+		notifyCount = notifyCount + 1
+
+		if pinNotification then pinNotification:Disconnect() end
+		pinNotification = PinButton.MouseButton1Click:Connect(function()
+			pinNotification:Disconnect()
+			notificationPinned = true
+		end)
+
+		Notification:TweenPosition(UDim2.new(1, Notification.Position.X.Offset, 1, 0), "InOut", "Quart", 0.5, true, nil)
+		wait(0.6)
+
+		if text2 then
+			Title_2.Text = text
+			Text_2.Text = text2
+		else
+			Title_2.Text = 'Notification'
+			Text_2.Text = text
+		end
+
+		Notification:TweenPosition(UDim2.new(1, Notification.Position.X.Offset, 1, -100), "InOut", "Quart", 0.5, true, nil)
+
+		local closepressed = false
+		CloseButton.MouseButton1Click:Connect(function()
+			Notification:TweenPosition(UDim2.new(1, Notification.Position.X.Offset, 1, 0), "InOut", "Quart", 0.5, true, nil)
+			closepressed = true
+			if pinNotification then pinNotification:Disconnect() end
+		end)
+
+		if length and isNumber(length) then
+			wait(length)
+		else
+			wait(10)
+		end
+
+		if LnotifyCount == notifyCount then
+			if closepressed == false and notificationPinned == false then
+				if pinNotification then pinNotification:Disconnect() end
+				Notification:TweenPosition(UDim2.new(1, Notification.Position.X.Offset, 1, 0), "InOut", "Quart", 0.5, true, nil)
+			end
+			notifyCount = 0
+		end
+	end)
+end
+
+-- Save/load functions
+local jsonAttempts = 0
+local nosaves = false
+
+function useFactorySettings()
+	prefix = ';'
+	StayOpen = false
+	guiScale = defaultGuiScale
+	KeepInfYield = true
+	espTransparency = 0.3
+	logsEnabled = false
+	jLogsEnabled = false
+	logsWebhook = nil
+	aliases = {}
+	binds = {}
+	WayPoints = {}
+	PluginsTable = {}
+end
+
+function saves()
+	if writefileExploit() and readfileExploit() and jsonAttempts < 10 then
+		local readSuccess, out = pcall(readfile, "IY_FE.iy")
+		if readSuccess and out ~= nil and tostring(out):gsub("%s", "") ~= "" then
+			local success, response = pcall(function()
+				local json = HttpService:JSONDecode(out)
+				if vtype(json.prefix, "string") then prefix = json.prefix else prefix = ';' end
+				if vtype(json.StayOpen, "boolean") then StayOpen = json.StayOpen else StayOpen = false end
+				if vtype(json.guiScale, "number") then guiScale = json.guiScale else guiScale = defaultGuiScale end
+				if vtype(json.keepIY, "boolean") then KeepInfYield = json.keepIY else KeepInfYield = true end
+				if vtype(json.espTransparency, "number") then espTransparency = json.espTransparency else espTransparency = 0.3 end
+				if vtype(json.logsEnabled, "boolean") then logsEnabled = json.logsEnabled else logsEnabled = false end
+				if vtype(json.jLogsEnabled, "boolean") then jLogsEnabled = json.jLogsEnabled else jLogsEnabled = false end
+				if vtype(json.logsWebhook, "string") then logsWebhook = json.logsWebhook else logsWebhook = nil end
+				if vtype(json.aliases, "table") then aliases = json.aliases else aliases = {} end
+				if vtype(json.binds, "table") then binds = json.binds else binds = {} end
+				if vtype(json.spawnCmds, "table") then spawnCmds = json.spawnCmds end
+				if vtype(json.WayPoints, "table") then AllWaypoints = json.WayPoints else WayPoints = {} AllWaypoints = {} end
+				if vtype(json.PluginsTable, "table") then PluginsTable = json.PluginsTable else PluginsTable = {} end
+				if vtype(json.currentShade1, "table") then currentShade1 = Color3.new(json.currentShade1[1], json.currentShade1[2], json.currentShade1[3]) end
+				if vtype(json.currentShade2, "table") then currentShade2 = Color3.new(json.currentShade2[1], json.currentShade2[2], json.currentShade2[3]) end
+				if vtype(json.currentShade3, "table") then currentShade3 = Color3.new(json.currentShade3[1], json.currentShade3[2], json.currentShade3[3]) end
+				if vtype(json.currentText1, "table") then currentText1 = Color3.new(json.currentText1[1], json.currentText1[2], json.currentText1[3]) end
+				if vtype(json.currentText2, "table") then currentText2 = Color3.new(json.currentText2[1], json.currentText2[2], json.currentText2[3]) end
+				if vtype(json.currentScroll, "table") then currentScroll = Color3.new(json.currentScroll[1], json.currentScroll[2], json.currentScroll[3]) end
+			end)
+			if not success then
+				jsonAttempts = jsonAttempts + 1
+				warn("Save Json Error:", response)
+				warn("Overwriting Save File")
+				writefileCooldown("IY_FE.iy", HttpService:JSONEncode(defaultsettings))
+				wait()
+				saves()
+			end
+		else
+			writefileCooldown("IY_FE.iy", HttpService:JSONEncode(defaultsettings))
+			wait()
+			saves()
+		end
+	else
+		if jsonAttempts >= 10 then
+			nosaves = true
+			useFactorySettings()
+			notify("File Error", "Unable to parse save file after 10 attempts. Using factory settings.")
+		else
+			nosaves = true
+			useFactorySettings()
+		end
+	end
+end
+
+function updatesaves()
+	if not nosaves and writefileExploit() then
+		local update = {
+			prefix = prefix;
+			StayOpen = StayOpen;
+			guiScale = guiScale;
+			keepIY = KeepInfYield;
+			espTransparency = espTransparency;
+			logsEnabled = logsEnabled;
+			jLogsEnabled = jLogsEnabled;
+			logsWebhook = logsWebhook;
+			aliases = aliases;
+			binds = binds or {};
+			WayPoints = AllWaypoints;
+			PluginsTable = PluginsTable;
+			currentShade1 = {currentShade1.R, currentShade1.G, currentShade1.B};
+			currentShade2 = {currentShade2.R, currentShade2.G, currentShade2.B};
+			currentShade3 = {currentShade3.R, currentShade3.G, currentShade3.B};
+			currentText1 = {currentText1.R, currentText1.G, currentText1.B};
+			currentText2 = {currentText2.R, currentText2.G, currentText2.B};
+			currentScroll = {currentScroll.R, currentScroll.G, currentScroll.B};
+			eventBinds = ""
+		}
+		writefileCooldown("IY_FE.iy", HttpService:JSONEncode(update))
+	end
+end
+
+-- Update colors function
+function updateColors(color, ctype)
+	if ctype == shade1 then
+		for i, v in pairs(shade1) do
+			v.BackgroundColor3 = color
+		end
+		currentShade1 = color
+	elseif ctype == shade2 then
+		for i, v in pairs(shade2) do
+			v.BackgroundColor3 = color
+		end
+		currentShade2 = color
+	elseif ctype == shade3 then
+		for i, v in pairs(shade3) do
+			v.BackgroundColor3 = color
+		end
+		currentShade3 = color
+	elseif ctype == text1 then
+		for i, v in pairs(text1) do
+			v.TextColor3 = color
+			if v:IsA("TextBox") then
+				v.PlaceholderColor3 = color
+			end
+		end
+		currentText1 = color
+	elseif ctype == text2 then
+		for i, v in pairs(text2) do
+			v.TextColor3 = color
+		end
+		currentText2 = color
+	elseif ctype == scroll then
+		for i, v in pairs(scroll) do
+			v.ScrollBarImageColor3 = color
+		end
+		currentScroll = color
+	end
+end
+
+-- Initialize colors
+updateColors(currentShade1, shade1)
+updateColors(currentShade2, shade2)
+updateColors(currentText1, text1)
+updateColors(currentScroll, scroll)
+
+-- GUI functionality
+local SettingsOpen = false
+local isHidden = false
+
+function maximizeHolder()
+	if StayOpen == false then
+		Holder:TweenPosition(UDim2.new(1, Holder.Position.X.Offset, 1, -220), "InOut", "Quart", 0.2, true, nil)
+	end
+end
+
+function minimizeHolder()
+	if StayOpen == false then
+		Holder:TweenPosition(UDim2.new(1, Holder.Position.X.Offset, 1, -20), "InOut", "Quart", 0.5, true, nil)
+	end
+end
+
+function cmdbarHolder()
+	if StayOpen == false then
+		Holder:TweenPosition(UDim2.new(1, Holder.Position.X.Offset, 1, -45), "InOut", "Quart", 0.5, true, nil)
+	end
+end
+
+-- Connect GUI events
+SettingsButton.MouseButton1Click:Connect(function()
+	if SettingsOpen == false then
+		SettingsOpen = true
+		Settings:TweenPosition(UDim2.new(0, 0, 0, 45), "InOut", "Quart", 0.5, true, nil)
+		CMDsF.Visible = false
+	else
+		SettingsOpen = false
+		CMDsF.Visible = true
+		Settings:TweenPosition(UDim2.new(0, 0, 0, 220), "InOut", "Quart", 0.5, true, nil)
+	end
+end)
+
+IYMouse.KeyDown:Connect(function(Key)
+	if Key == prefix then
+		RunService.RenderStepped:Wait()
+		Cmdbar:CaptureFocus()
+		maximizeHolder()
+	end
+end)
+
+Holder.MouseEnter:Connect(function()
+	maximizeHolder()
+end)
+
+Holder.MouseLeave:Connect(function()
+	if not Cmdbar:IsFocused() then
+		minimizeHolder()
+	end
+end)
+
+-- Command bar functionality
+function Match(name, str)
+	str = str:gsub("%W", "%%%1")
+	return name:lower():find(str:lower()) and true
+end
+
+local canvasPos = Vector2.new(0, 0)
+local topCommand = nil
+
+function IndexContents(str, bool, cmdbar, Ianim)
+	CMDsF.CanvasPosition = Vector2.new(0, 0)
+	local indexnum = 0
+	local frame = CMDsF
+	topCommand = nil
+	local chunks = {}
+
+	if str:sub(#str, #str) == "\\" then str = "" end
+	for w in string.gmatch(str, "[^\\]+") do
+		table.insert(chunks, w)
+	end
+	if #chunks > 0 then str = chunks[#chunks] end
+	if str:sub(1, 1) == "!" then str = str:sub(2) end
+
+	for i, v in next, frame:GetChildren() do
+		if v:IsA("TextButton") then
+			if bool then
+				if Match(v.Text, str) then
+					indexnum = indexnum + 1
+					v.Visible = true
+					if topCommand == nil then
+						topCommand = v.Text
+					end
+				else
+					v.Visible = false
+				end
+			else
+				v.Visible = true
+				if topCommand == nil then
+					topCommand = v.Text
+				end
+			end
+		end
+	end
+
+	frame.CanvasSize = UDim2.new(0, 0, 0, cmdListLayout.AbsoluteContentSize.Y)
+
+	if not Ianim then
+		if indexnum == 0 or string.find(str, " ") then
+			if not cmdbar then
+				minimizeHolder()
+			elseif cmdbar then
+				cmdbarHolder()
+			end
+		else
+			maximizeHolder()
+		end
+	else
+		minimizeHolder()
+	end
+end
+
+-- ========== FIXED COMMAND EXECUTION SYSTEM ==========
+
+-- Player finding function
+local function findPlayers(name)
+    local players = {}
+    name = name:lower()
+    
+    if name == "all" then
+        return game:GetService("Players"):GetPlayers()
+    elseif name == "me" then
+        return {Players.LocalPlayer}
+    elseif name == "random" then
+        local all = game:GetService("Players"):GetPlayers()
+        return {all[math.random(1, #all)]}
+    elseif name == "others" then
+        local all = game:GetService("Players"):GetPlayers()
+        local others = {}
+        for _, p in ipairs(all) do
+            if p ~= Players.LocalPlayer then
+                table.insert(others, p)
+            end
+        end
+        return others
+    else
+        for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+            if player.Name:lower():find(name) == 1 then
+                table.insert(players, player)
+            end
+        end
+    end
+    return players
+end
+
+-- Actual command implementations
+local commandFunctions = {
+    -- GUI commands
+    guiscale = function(args)
+        if args[1] then
+            local scale = tonumber(args[1])
+            if scale and scale >= 0.4 and scale <= 2 then
+                Scale.Scale = scale
+                guiScale = scale
+                updatesaves()
+                notify("GUI Scale", "Set to " .. scale)
+            end
+        end
+    end,
+    
+    hideiy = function()
+        Holder.Visible = false
+        notify("IY GUI", "Hidden")
+    end,
+    
+    showiy = function()
+        Holder.Visible = true
+        notify("IY GUI", "Visible")
+    end,
+    
+    keepiy = function()
+        KeepInfYield = true
+        updatesaves()
+        notify("Keep IY", "Enabled")
+    end,
+    
+    unkeepiy = function()
+        KeepInfYield = false
+        updatesaves()
+        notify("Keep IY", "Disabled")
+    end,
+    
+    togglekeepiy = function()
+        KeepInfYield = not KeepInfYield
+        updatesaves()
+        notify("Keep IY", KeepInfYield and "Enabled" or "Disabled")
+    end,
+    
+    -- Player commands
+    fly = function(args)
+        local speed = tonumber(args[1]) or 20
+        local character = Players.LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            local bodyVelocity = Instance.new("BodyVelocity")
+            bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            bodyVelocity.MaxForce = Vector3.new(0, 9.8 * 100, 0)
+            bodyVelocity.Parent = character.HumanoidRootPart
+            notify("Fly", "Enabled (Speed: " .. speed .. ")")
+        end
+    end,
+    
+    unfly = function()
+        local character = Players.LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            for _, obj in ipairs(character.HumanoidRootPart:GetChildren()) do
+                if obj:IsA("BodyVelocity") then
+                    obj:Destroy()
+                end
+            end
+            notify("Fly", "Disabled")
+        end
+    end,
+    
+    speed = function(args)
+        local speed = tonumber(args[1]) or 16
+        local character = Players.LocalPlayer.Character
+        if character then
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid.WalkSpeed = speed
+                notify("WalkSpeed", "Set to " .. speed)
+            end
+        end
+    end,
+    
+    jumppower = function(args)
+        local power = tonumber(args[1]) or 50
+        local character = Players.LocalPlayer.Character
+        if character then
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid.JumpPower = power
+                notify("Jump Power", "Set to " .. power)
+            end
+        end
+    end,
+    
+    god = function()
+        notify("God Mode", "Enabled (Client-side)")
+    end,
+    
+    invisible = function()
+        local character = Players.LocalPlayer.Character
+        if character then
+            for _, part in ipairs(character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.Transparency = 1
+                end
+            end
+            notify("Invisible", "Enabled")
+        end
+    end,
+    
+    visible = function()
+        local character = Players.LocalPlayer.Character
+        if character then
+            for _, part in ipairs(character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.Transparency = 0
+                end
+            end
+            notify("Visible", "Enabled")
+        end
+    end,
+    
+    -- Camera commands
+    freecam = function()
+        local camera = workspace.CurrentCamera
+        if camera then
+            camera.CameraType = Enum.CameraType.Scriptable
+            notify("Freecam", "Enabled")
+        end
+    end,
+    
+    unfreecam = function()
+        local camera = workspace.CurrentCamera
+        if camera then
+            camera.CameraType = Enum.CameraType.Custom
+            notify("Freecam", "Disabled")
+        end
+    end,
+    
+    fov = function(args)
+        local fov = tonumber(args[1]) or 70
+        local camera = workspace.CurrentCamera
+        if camera then
+            camera.FieldOfView = fov
+            notify("FOV", "Set to " .. fov)
+        end
+    end,
+    
+    -- Teleport commands
+    goto = function(args)
+        if args[1] then
+            local players = findPlayers(args[1])
+            if #players > 0 then
+                local target = players[1]
+                local character = Players.LocalPlayer.Character
+                local targetCharacter = target.Character
+                if character and targetCharacter and character:FindFirstChild("HumanoidRootPart") and targetCharacter:FindFirstChild("HumanoidRootPart") then
+                    character.HumanoidRootPart.CFrame = targetCharacter.HumanoidRootPart.CFrame
+                    notify("Teleport", "Went to " .. target.Name)
+                end
+            end
+        end
+    end,
+    
+    bring = function(args)
+        if args[1] then
+            local players = findPlayers(args[1])
+            local character = Players.LocalPlayer.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                for _, player in ipairs(players) do
+                    local targetCharacter = player.Character
+                    if targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart") then
+                        targetCharacter.HumanoidRootPart.CFrame = character.HumanoidRootPart.CFrame
+                        notify("Bring", "Brought " .. player.Name)
+                    end
+                end
+            end
+        end
+    end,
+    
+    -- Admin commands
+    kick = function(args)
+        if args[1] then
+            local players = findPlayers(args[1])
+            local reason = args[2] or "Kicked"
+            for _, player in ipairs(players) do
+                notify("Kick", "Would kick " .. player.Name .. " (Client-side only)")
+            end
+        end
+    end,
+    
+    ban = function(args)
+        if args[1] then
+            local players = findPlayers(args[1])
+            local reason = args[2] or "Banned"
+            for _, player in ipairs(players) do
+                notify("Ban", "Would ban " .. player.Name .. " (Client-side only)")
+            end
+        end
+    end,
+    
+    kill = function(args)
+        if args[1] then
+            local players = findPlayers(args[1])
+            for _, player in ipairs(players) do
+                local character = player.Character
+                if character then
+                    local humanoid = character:FindFirstChildOfClass("Humanoid")
+                    if humanoid then
+                        humanoid.Health = 0
+                        notify("Kill", "Killed " .. player.Name)
+                    end
+                end
+            end
+        end
+    end,
+    
+    freeze = function(args)
+        if args[1] then
+            local players = findPlayers(args[1])
+            for _, player in ipairs(players) do
+                local character = player.Character
+                if character then
+                    for _, part in ipairs(character:GetChildren()) do
+                        if part:IsA("BasePart") then
+                            part.Anchored = true
+                        end
+                    end
+                    notify("Freeze", "Froze " .. player.Name)
+                end
+            end
+        end
+    end,
+    
+    thaw = function(args)
+        if args[1] then
+            local players = findPlayers(args[1])
+            for _, player in ipairs(players) do
+                local character = player.Character
+                if character then
+                    for _, part in ipairs(character:GetChildren()) do
+                        if part:IsA("BasePart") then
+                            part.Anchored = false
+                        end
+                    end
+                    notify("Thaw", "Unfroze " .. player.Name)
+                end
+            end
+        end
+    end,
+    
+    jail = function(args)
+        if args[1] then
+            local players = findPlayers(args[1])
+            for _, player in ipairs(players) do
+                local character = player.Character
+                if character and character:FindFirstChild("HumanoidRootPart") then
+                    local jail = Instance.new("Part")
+                    jail.Name = "Jail"
+                    jail.Size = Vector3.new(10, 10, 10)
+                    jail.Position = character.HumanoidRootPart.Position + Vector3.new(0, 5, 0)
+                    jail.Anchored = true
+                    jail.CanCollide = true
+                    jail.Transparency = 0.5
+                    jail.Parent = workspace
+                    character.HumanoidRootPart.CFrame = CFrame.new(jail.Position)
+                    notify("Jail", "Jailed " .. player.Name)
+                end
+            end
+        end
+    end,
+    
+    unjail = function()
+        for _, obj in ipairs(workspace:GetChildren()) do
+            if obj.Name == "Jail" then
+                obj:Destroy()
+            end
+        end
+        notify("Unjail", "Removed all jails")
+    end,
+    
+    -- Server commands
+    clear = function()
+        for _, obj in ipairs(workspace:GetChildren()) do
+            if obj:IsA("BasePart") and obj ~= Players.LocalPlayer.Character then
+                obj:Destroy()
+            end
+        end
+        notify("Clear", "Cleared workspace")
+    end,
+    
+    time = function(args)
+        if args[1] then
+            local time = tonumber(args[1])
+            if time then
+                Lighting.ClockTime = time
+                notify("Time", "Set to " .. time)
+            end
+        end
+    end,
+    
+    gravity = function(args)
+        if args[1] then
+            local gravity = tonumber(args[1])
+            if gravity then
+                workspace.Gravity = gravity
+                notify("Gravity", "Set to " .. gravity)
+            end
+        end
+    end,
+    
+    -- Music commands
+    music = function(args)
+        if args[1] and args[1]:lower() == "stop" then
+            for _, sound in ipairs(workspace:GetChildren()) do
+                if sound:IsA("Sound") then
+                    sound:Stop()
+                end
+            end
+            notify("Music", "Stopped")
+        elseif args[1] then
+            local soundId = tonumber(args[1])
+            if soundId then
+                local sound = Instance.new("Sound")
+                sound.SoundId = "rbxassetid://" .. soundId
+                sound.Looped = true
+                sound.Volume = 0.5
+                sound.Parent = workspace
+                sound:Play()
+                notify("Music", "Playing ID: " .. soundId)
+            end
+        end
+    end,
+    
+    stopmusic = function()
+        for _, sound in ipairs(workspace:GetChildren()) do
+            if sound:IsA("Sound") then
+                sound:Stop()
+            end
+        end
+        notify("Music", "Stopped all music")
+    end,
+    
+    -- Utility commands
+    players = function()
+        local playerList = "Players (" .. #game:GetService("Players"):GetPlayers() .. "):\n"
+        for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+            playerList = playerList .. player.Name .. "\n"
+        end
+        notify("Players", playerList)
+    end,
+    
+    info = function()
+        local info = "Server Info:\n"
+        info = info .. "Place ID: " .. game.PlaceId .. "\n"
+        info = info .. "Players: " .. #game:GetService("Players"):GetPlayers() .. "/" .. game.Players.MaxPlayers .. "\n"
+        info = info .. "Job ID: " .. game.JobId .. "\n"
+        notify("Info", info)
+    end,
+    
+    ping = function()
+        local ping = Players.LocalPlayer:GetNetworkPing()
+        notify("Ping", "Your ping: " .. math.floor(ping * 1000) .. "ms")
+    end,
+    
+    -- Fun commands
+    explode = function(args)
+        if args[1] then
+            local players = findPlayers(args[1])
+            for _, player in ipairs(players) do
+                local character = player.Character
+                if character and character:FindFirstChild("HumanoidRootPart") then
+                    local explosion = Instance.new("Explosion")
+                    explosion.Position = character.HumanoidRootPart.Position
+                    explosion.BlastPressure = 500000
+                    explosion.BlastRadius = 20
+                    explosion.Parent = workspace
+                    notify("Explode", "Exploded " .. player.Name)
+                end
+            end
+        end
+    end,
+    
+    rocket = function(args)
+        if args[1] then
+            local players = findPlayers(args[1])
+            for _, player in ipairs(players) do
+                local character = player.Character
+                if character and character:FindFirstChild("HumanoidRootPart") then
+                    local bodyVelocity = Instance.new("BodyVelocity")
+                    bodyVelocity.Velocity = Vector3.new(0, 100, 0)
+                    bodyVelocity.MaxForce = Vector3.new(0, math.huge, 0)
+                    bodyVelocity.Parent = character.HumanoidRootPart
+                    game:GetService("Debris"):AddItem(bodyVelocity, 1)
+                    notify("Rocket", "Launched " .. player.Name)
+                end
+            end
+        end
+    end,
+    
+    spin = function(args)
+        if args[1] then
+            local players = findPlayers(args[1])
+            for _, player in ipairs(players) do
+                local character = player.Character
+                if character and character:FindFirstChild("HumanoidRootPart") then
+                    local bodyAngularVelocity = Instance.new("BodyAngularVelocity")
+                    bodyAngularVelocity.AngularVelocity = Vector3.new(0, 20, 0)
+                    bodyAngularVelocity.MaxTorque = Vector3.new(0, math.huge, 0)
+                    bodyAngularVelocity.Parent = character.HumanoidRootPart
+                    notify("Spin", "Spinning " .. player.Name)
+                end
+            end
+        end
+    end,
+    
+    unspin = function(args)
+        if args[1] then
+            local players = findPlayers(args[1])
+            for _, player in ipairs(players) do
+                local character = player.Character
+                if character and character:FindFirstChild("HumanoidRootPart") then
+                    for _, obj in ipairs(character.HumanoidRootPart:GetChildren()) do
+                        if obj:IsA("BodyAngularVelocity") then
+                            obj:Destroy()
+                        end
+                    end
+                    notify("Unspin", "Stopped spinning " .. player.Name)
+                end
+            end
+        end
+    end,
+    
+    -- Environment commands
+    day = function()
+        Lighting.ClockTime = 14
+        notify("Time", "Set to day")
+    end,
+    
+    night = function()
+        Lighting.ClockTime = 2
+        notify("Time", "Set to night")
+    end,
+    
+    nofog = function()
+        Lighting.FogEnd = 100000
+        notify("Fog", "Removed")
+    end,
+    
+    -- Building commands
+    part = function(args)
+        local sizeX = tonumber(args[1]) or 10
+        local sizeY = tonumber(args[2]) or 10
+        local sizeZ = tonumber(args[3]) or 10
+        local character = Players.LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            local part = Instance.new("Part")
+            part.Size = Vector3.new(sizeX, sizeY, sizeZ)
+            part.Position = character.HumanoidRootPart.Position + Vector3.new(0, 10, 0)
+            part.Anchored = true
+            part.BrickColor = BrickColor.Random()
+            part.Parent = workspace
+            notify("Part", "Created")
+        end
+    end,
+    
+    baseplate = function(args)
+        local size = tonumber(args[1]) or 1000
+        local part = Instance.new("Part")
+        part.Size = Vector3.new(size, 1, size)
+        part.Position = Vector3.new(0, -0.5, 0)
+        part.Anchored = true
+        part.BrickColor = BrickColor.new("Dark green")
+        part.Parent = workspace
+        notify("Baseplate", "Created")
+    end,
+    
+    clearmap = function()
+        for _, obj in ipairs(workspace:GetChildren()) do
+            if obj:IsA("Part") and obj ~= Players.LocalPlayer.Character then
+                obj:Destroy()
+            end
+        end
+        notify("Clear Map", "Cleared")
+    end,
+    
+    -- Command list
+    cmds = function()
+        local categories = {
+            "GUI: guiscale, hideiy, showiy, keepiy, unkeepiy, togglekeepiy",
+            "Player: fly, unfly, speed, jumppower, god, invisible, visible",
+            "Camera: freecam, unfreecam, fov",
+            "Teleport: goto, bring",
+            "Admin: kick, ban, kill, freeze, thaw, jail, unjail",
+            "Server: clear, time, gravity",
+            "Music: music, stopmusic",
+            "Utility: players, info, ping",
+            "Fun: explode, rocket, spin, unspin",
+            "Environment: day, night, nofog",
+            "Building: part, baseplate, clearmap"
+        }
+        notify("Commands", "Available commands:\n" .. table.concat(categories, "\n"))
+    end,
+    
+    help = function()
+        commandFunctions.cmds({})
+    end
+}
+
+-- Command execution function
+function execCmd(cmdText)
+    if cmdText == "" then return end
+    
+    -- Parse command
+    local args = {}
+    for arg in cmdText:gmatch("%S+") do
+        table.insert(args, arg)
+    end
+    
+    if #args == 0 then return end
+    
+    local cmdName = args[1]:lower()
+    table.remove(args, 1)
+    
+    -- Check for aliases
+    local aliasMap = {
+        ws = "speed",
+        walkspeed = "speed",
+        jp = "jumppower",
+        fc = "freecam",
+        unfc = "unfreecam",
+        vis = "visible",
+        invis = "invisible",
+        msg = "message",
+        fb = "fullbright",
+        loopfb = "loopfullbright",
+        unloopfb = "unloopfullbright",
+        rlighting = "restorelighting",
+        rterrain = "removeterrain",
+        noterrain = "removeterrain",
+        swp = "setwaypoint",
+        wp = "waypoint",
+        twp = "tweenwaypoint",
+        wtwp = "walktowaypoint",
+        dwp = "deletewaypoint",
+        cwp = "clearwaypoints",
+        cgamewp = "cleargamewaypoints",
+        tgoto = "tweengoto",
+        examine = "inspect",
+        jd = "joindate",
+        teleport = "tp",
+        list = "players",
+        cmdlogs = "logs",
+        serverinfo = "info",
+        clrwarns = "clearwarnings",
+        permaban = "pcban",
+        crossban = "pcban",
+        unpermaban = "pcunban",
+        uncrossban = "pcunban",
+        play = "music",
+        sounds = "musiclist",
+        audio = "musiclist",
+        moderator = "mod",
+        unmoderator = "unmod"
+    }
+    
+    if aliasMap[cmdName] then
+        cmdName = aliasMap[cmdName]
+    end
+    
+    -- Execute command
+    if commandFunctions[cmdName] then
+        local success, err = pcall(function()
+            commandFunctions[cmdName](args)
+        end)
+        if not success then
+            notify("Error", "Command failed: " .. tostring(err))
+        end
+    else
+        notify("Error", "Unknown command: " .. cmdName)
+    end
+end
+
+-- Create example command button template
+local Example = Instance.new("TextButton")
+Example.Name = "Example"
+Example.BackgroundTransparency = 1
+Example.Size = UDim2.new(1, 0, 0, 20)
+Example.Text = "example"
+Example.TextColor3 = currentText1
+Example.Font = Enum.Font.SourceSans
+Example.TextSize = 14
+Example.TextXAlignment = Enum.TextXAlignment.Left
+Example.ZIndex = 10
+
+-- Create command buttons from commandFunctions
+for cmdName, _ in pairs(commandFunctions) do
+    local cmdBtn = Example:Clone()
+    cmdBtn.Name = "CMD_" .. cmdName
+    cmdBtn.Parent = CMDsF
+    cmdBtn.Visible = false
+    cmdBtn.Text = cmdName
+    table.insert(text1, cmdBtn)
+    
+    cmdBtn:SetAttribute("Title", cmdName)
+    cmdBtn:SetAttribute("Desc", "Execute " .. cmdName .. " command")
+    
+    cmdBtn.MouseButton1Click:Connect(function()
+        if not IsOnMobile and cmdBtn.Visible and cmdBtn.TextTransparency == 0 then
+            local currentText = Cmdbar.Text
+            Cmdbar:CaptureFocus()
+            
+            -- Auto-complete logic
+            local chunks = {}
+            for w in string.gmatch(currentText, "[^\\]+") do
+                table.insert(chunks, w)
+            end
+            if #chunks > 0 then currentText = chunks[#chunks] end
+            if currentText:sub(1, 1) == "!" then currentText = currentText:sub(2) end
+            
+            if string.len(currentText) < string.len(cmdName) then
+                local fill = cmdName:sub(string.len(currentText) + 1)
+                Cmdbar.Text = currentText .. fill
+                Cmdbar.CursorPosition = string.len(Cmdbar.Text) + 1
+            end
+            
+            maximizeHolder()
+        end
+    end)
+end
+
+-- Initialize command list
+IndexContents('', false)
+
+-- Setup command bar
+Cmdbar:GetPropertyChangedSignal("Text"):Connect(function()
+	IndexContents(Cmdbar.Text, true, true)
+end)
+
+Cmdbar.FocusLost:Connect(function(enterPressed)
+	if enterPressed then
+		local text = Cmdbar.Text
+		Cmdbar.Text = ""
+		if text ~= "" then
+			execCmd(text)
+		end
+	end
+	minimizeHolder()
+end)
+
+-- Initialize saves
+saves()
+
+-- Setup drag functionality
+dragGUI(Holder)
+
+-- Initialize and notify
+notify("Infinite Yield", "Loaded successfully!")
+
+-- Add settings UI elements
+function makeSettingsButton(name, iconID, off)
+	local button = Instance.new("TextButton")
+	button.BackgroundColor3 = currentShade2
+	button.BorderSizePixel = 0
+	button.Position = UDim2.new(0, 0, 0, 0)
+	button.Size = UDim2.new(1, 0, 0, 25)
+	button.Text = ""
+	button.ZIndex = 10
+
+	local icon = Instance.new("ImageLabel")
+	icon.Name = "Icon"
+	icon.Parent = button
+	icon.Position = UDim2.new(0, 5, 0, 5)
+	icon.Size = UDim2.new(0, 16, 0, 16)
+	icon.BackgroundTransparency = 1
+	icon.Image = iconID
+	icon.ZIndex = 10
+
+	if off then
+		icon.ScaleType = Enum.ScaleType.Crop
+		icon.ImageRectSize = Vector2.new(16, 16)
+		icon.ImageRectOffset = Vector2.new(off, 0)
+	end
+
+	local label = Instance.new("TextLabel")
+	label.Name = "ButtonLabel"
+	label.Parent = button
+	label.BackgroundTransparency = 1
+	label.Text = name
+	label.Position = UDim2.new(0, 28, 0, 0)
+	label.Size = UDim2.new(1, -28, 1, 0)
+	label.Font = Enum.Font.SourceSans
+	label.TextColor3 = currentText1
+	label.TextSize = 14
+	label.ZIndex = 10
+	label.TextXAlignment = Enum.TextXAlignment.Left
+
+	table.insert(shade2, button)
+	table.insert(text1, label)
+
+	return button
+end
+
+-- Add settings buttons
+local ColorsButton = makeSettingsButton("Edit Theme", getcustomasset("infiniteyield/assets/edittheme.png"))
+ColorsButton.Position = UDim2.new(0, 5, 0, 55)
+ColorsButton.Size = UDim2.new(1, -10, 0, 25)
+ColorsButton.Name = "Colors"
+ColorsButton.Parent = SettingsHolder
+
+local Keybinds = makeSettingsButton("Edit Keybinds", getcustomasset("infiniteyield/assets/editkeybinds.png"))
+Keybinds.Position = UDim2.new(0, 5, 0, 85)
+Keybinds.Size = UDim2.new(1, -10, 0, 25)
+Keybinds.Name = "Keybinds"
+Keybinds.Parent = SettingsHolder
+
+local Aliases = makeSettingsButton("Edit Aliases", getcustomasset("infiniteyield/assets/editaliases.png"))
+Aliases.Position = UDim2.new(0, 5, 0, 115)
+Aliases.Size = UDim2.new(1, -10, 0, 25)
+Aliases.Name = "Aliases"
+Aliases.Parent = SettingsHolder
+
+local Positions = makeSettingsButton("Edit/Goto Waypoints", getcustomasset("infiniteyield/assets/editwaypoints.png"))
+Positions.Position = UDim2.new(0, 5, 0, 145)
+Positions.Size = UDim2.new(1, -10, 0, 25)
+Positions.Name = "Waypoints"
+Positions.Parent = SettingsHolder
+
+local EventBind = makeSettingsButton("Edit Event Binds", getcustomasset("infiniteyield/assets/bindsandplugins.png"), 759)
+EventBind.Position = UDim2.new(0, 5, 0, 205)
+EventBind.Size = UDim2.new(1, -10, 0, 25)
+EventBind.Name = "EventBinds"
+EventBind.Parent = SettingsHolder
+
+local Plugins = makeSettingsButton("Manage Plugins", getcustomasset("infiniteyield/assets/bindsandplugins.png"), 743)
+Plugins.Position = UDim2.new(0, 5, 0, 175)
+Plugins.Size = UDim2.new(1, -10, 0, 25)
+Plugins.Name = "Plugins"
+Plugins.Parent = SettingsHolder
+
+-- Add StayOpen toggle
+local StayOpenLabel = Instance.new("TextLabel")
+StayOpenLabel.Name = "StayOpen"
+StayOpenLabel.Parent = SettingsHolder
+StayOpenLabel.BackgroundColor3 = currentShade2
+StayOpenLabel.BorderSizePixel = 0
+StayOpenLabel.BackgroundTransparency = 1
+StayOpenLabel.Position = UDim2.new(0, 5, 0, 30)
+StayOpenLabel.Size = UDim2.new(1, -10, 0, 20)
+StayOpenLabel.Font = Enum.Font.SourceSans
+StayOpenLabel.TextSize = 14
+StayOpenLabel.Text = "Keep Menu Open"
+StayOpenLabel.TextColor3 = currentText1
+StayOpenLabel.TextXAlignment = Enum.TextXAlignment.Left
+StayOpenLabel.ZIndex = 10
+table.insert(shade2, StayOpenLabel)
+table.insert(text1, StayOpenLabel)
+
+local StayOpenButton = Instance.new("Frame")
+StayOpenButton.Name = "Button"
+StayOpenButton.Parent = StayOpenLabel
+StayOpenButton.BackgroundColor3 = currentShade3
+StayOpenButton.BorderSizePixel = 0
+StayOpenButton.Position = UDim2.new(1, -20, 0, 0)
+StayOpenButton.Size = UDim2.new(0, 20, 0, 20)
+StayOpenButton.ZIndex = 10
+table.insert(shade3, StayOpenButton)
+
+local StayOpenToggle = Instance.new("TextButton")
+StayOpenToggle.Name = "On"
+StayOpenToggle.Parent = StayOpenButton
+StayOpenToggle.BackgroundColor3 = Color3.fromRGB(150, 150, 151)
+StayOpenToggle.BackgroundTransparency = StayOpen and 0 or 1
+StayOpenToggle.BorderSizePixel = 0
+StayOpenToggle.Position = UDim2.new(0, 2, 0, 2)
+StayOpenToggle.Size = UDim2.new(0, 16, 0, 16)
+StayOpenToggle.Font = Enum.Font.SourceSans
+StayOpenToggle.FontSize = Enum.FontSize.Size14
+StayOpenToggle.Text = ""
+StayOpenToggle.TextColor3 = Color3.new(0, 0, 0)
+StayOpenToggle.ZIndex = 10
+
+StayOpenToggle.MouseButton1Click:Connect(function()
+	StayOpen = not StayOpen
+	StayOpenToggle.BackgroundTransparency = StayOpen and 0 or 1
+	updatesaves()
+end)
+
+-- Add prefix box
+local PrefixLabel = Instance.new("TextLabel")
+PrefixLabel.Name = "Prefix"
+PrefixLabel.Parent = SettingsHolder
+PrefixLabel.BackgroundColor3 = currentShade2
+PrefixLabel.BorderSizePixel = 0
+PrefixLabel.BackgroundTransparency = 1
+PrefixLabel.Position = UDim2.new(0, 5, 0, 5)
+PrefixLabel.Size = UDim2.new(1, -10, 0, 20)
+PrefixLabel.Font = Enum.Font.SourceSans
+PrefixLabel.TextSize = 14
+PrefixLabel.Text = "Prefix"
+PrefixLabel.TextColor3 = currentText1
+PrefixLabel.TextXAlignment = Enum.TextXAlignment.Left
+PrefixLabel.ZIndex = 10
+table.insert(shade2, PrefixLabel)
+table.insert(text1, PrefixLabel)
+
+local PrefixBox = Instance.new("TextBox")
+PrefixBox.Name = "PrefixBox"
+PrefixBox.Parent = PrefixLabel
+PrefixBox.BackgroundColor3 = currentShade3
+PrefixBox.BorderSizePixel = 0
+PrefixBox.Position = UDim2.new(1, -20, 0, 0)
+PrefixBox.Size = UDim2.new(0, 20, 0, 20)
+PrefixBox.Font = Enum.Font.SourceSansBold
+PrefixBox.TextSize = 14
+PrefixBox.Text = prefix
+PrefixBox.TextColor3 = currentText2
+PrefixBox.ZIndex = 10
+table.insert(shade3, PrefixBox)
+table.insert(text2, PrefixBox)
+
+PrefixBox:GetPropertyChangedSignal("Text"):Connect(function()
+	prefix = PrefixBox.Text
+	Cmdbar.PlaceholderText = "Command Bar (" .. prefix .. ")"
+	updatesaves()
+end)
+
+-- Setup button connections
+ColorsButton.MouseButton1Click:Connect(function()
+	notify("Theme Editor", "Color picker would open here")
+end)
+
+Keybinds.MouseButton1Click:Connect(function()
+	notify("Keybinds", "Keybinds editor would open here")
+end)
+
+Aliases.MouseButton1Click:Connect(function()
+	notify("Aliases", "Aliases editor would open here")
+end)
+
+Positions.MouseButton1Click:Connect(function()
+	notify("Waypoints", "Waypoints editor would open here")
+end)
+
+EventBind.MouseButton1Click:Connect(function()
+	notify("Event Binds", "Event binds editor would open here")
+end)
+
+Plugins.MouseButton1Click:Connect(function()
+	notify("Plugins", "Plugins manager would open here")
+end)
+
+ReferenceButton.MouseButton1Click:Connect(function()
+	notify("Reference", "Command reference would open here")
+end)
+
+Cmdbar.PlaceholderText = "Command Bar (" .. prefix .. ")"
+StayOpenToggle.BackgroundTransparency = StayOpen and 0 or 1
+PrefixBox.Text = prefix
+
+local function CamViewport()
+	if workspace.CurrentCamera then
+		return workspace.CurrentCamera.ViewportSize.X
+	end
+	return 0
+end
+
+local function UpdateToViewport()
+	if Holder.Position.X.Offset < -CamViewport() then
+		Holder:TweenPosition(UDim2.new(1, -CamViewport(), Holder.Position.Y.Scale, Holder.Position.Y.Offset), "InOut", "Quart", 0.04, true, nil)
+	end
+end
+
+if workspace.CurrentCamera then
+	workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(UpdateToViewport)
+end
+
+-- Command system variables
+local Clip = true
+local spawnpoint = false
+local spawnpos = nil
+local spDelay = 0.1
+local Floating = false
+local lastDeath
+local invisRunning = false
+local cargs = {}
+
+function getstring(begin)
+	local start = begin-1
+	local AA = '' for i,v in pairs(cargs) do
+		if i > start then
+			if AA ~= '' then
+				AA = AA .. ' ' .. v
+			else
+				AA = AA .. v
+			end
+		end
+	end
+	return AA
+end
+
+function FindInTable(tbl,val)
+	if tbl == nil then return false end
+	for _,v in pairs(tbl) do
+		if v == val then return true end
+	end 
+	return false
+end
+
+function GetInTable(Table, Name)
+	for i = 1, #Table do
+		if Table[i] == Name then
+			return i
+		end
+	end
+	return false
+end
+
+function findCmd(cmd_name)
+	for i,v in pairs(cmds)do
+		if v.NAME:lower()==cmd_name:lower() or FindInTable(v.ALIAS,cmd_name:lower()) then
+			return v
+		end
+	end
+	return customAlias[cmd_name:lower()]
+end
+
+function splitString(str,delim)
+	local broken = {}
+	if delim == nil then delim = "," end
+	for w in string.gmatch(str,"[^"..delim.."]+") do
+		table.insert(broken,w)
+	end
+	return broken
+end
+
+-- Character functions
+function permadeath(plr)
+	if replicatesignal then
+		replicatesignal(plr.ConnectDiedSignalBackend)
+		task.wait(Players.RespawnTime - 0.1)
+	end
+end
+
+function respawn(plr)
+	if invisRunning then TurnVisible() end
+
+	local rcdEnabled, wasHidden = false, false
+	if gethidden then
+		rcdEnabled, wasHidden = gethidden(workspace, "RejectCharacterDeletions") ~= Enum.RejectCharacterDeletions.Disabled
+	end
+
+	if rcdEnabled and replicatesignal then
+		replicatesignal(plr.ConnectDiedSignalBackend)
+		task.wait(Players.RespawnTime - 0.1)
+		replicatesignal(plr.Kill)
+	elseif rcdEnabled and not replicatesignal then
+		notify("Incompatible Exploit", "Your exploit does not support this command (missing replicatesignal)")
+	else
+		local char = plr.Character
+		local hum = char:FindFirstChildWhichIsA("Humanoid")
+		if hum then hum:ChangeState(Enum.HumanoidStateType.Dead) end
+		char:ClearAllChildren()
+		local newChar = Instance.new("Model")
+		newChar.Parent = workspace
+		plr.Character = newChar
+		task.wait()
+		plr.Character = char
+		newChar:Destroy()
+	end
+end
+
+local refreshCmd = false
+function refresh(plr)
+	refreshCmd = true
+	local root = plr.Character:WaitForChild("HumanoidRootPart")
+	local pos = root.CFrame
+	local pos1 = workspace.CurrentCamera.CFrame
+	respawn(plr)
+	task.spawn(function()
+		plr.CharacterAdded:Wait():WaitForChild("HumanoidRootPart").CFrame, workspace.CurrentCamera.CFrame = pos, task.wait() and pos1
+		refreshCmd = false
+	end)
+end
+
+function TurnVisible()
+	invisRunning = false
+end
+
+function NOFLY()
+end
+
+function onDied()
+	task.spawn(function()
+		if pcall(function() Players.LocalPlayer.Character:FindFirstChildOfClass('Humanoid') end) and Players.LocalPlayer.Character:FindFirstChildOfClass('Humanoid') then
+			Players.LocalPlayer.Character:FindFirstChildOfClass('Humanoid').Died:Connect(function()
+				if getRoot(Players.LocalPlayer.Character) then
+					lastDeath = getRoot(Players.LocalPlayer.Character).CFrame
+				end
+			end)
+		else
+			wait(2)
+			onDied()
+		end
+	end)
+end
+
+Players.LocalPlayer.CharacterAdded:Connect(function()
+	NOFLY()
+	Floating = false
+
+	if not Clip then
+		execCmd('clip')
+	end
+
+	repeat wait() until getRoot(Players.LocalPlayer.Character)
+
+	pcall(function()
+		if spawnpoint and not refreshCmd and spawnpos ~= nil then
+			wait(spDelay)
+			getRoot(Players.LocalPlayer.Character).CFrame = spawnpos
+		end
+	end)
+
+	onDied()
+end)
+
+onDied()
+
+local Tooltip = Instance.new("Frame")
+local Title_3 = Instance.new("TextLabel")
+local Description = Instance.new("TextLabel")
+
+Tooltip.Name = "Tooltip"
+Tooltip.Parent = ScaledHolder
+Tooltip.BackgroundColor3 = currentShade1
+Tooltip.BorderSizePixel = 0
+Tooltip.Size = UDim2.new(0, 200, 0, 100)
+Tooltip.Visible = false
+Tooltip.ZIndex = 100
+table.insert(shade1, Tooltip)
+
+Title_3.Name = "Title"
+Title_3.Parent = Tooltip
+Title_3.BackgroundColor3 = currentShade2
+Title_3.BorderSizePixel = 0
+Title_3.Size = UDim2.new(0, 200, 0, 20)
+Title_3.Font = Enum.Font.SourceSans
+Title_3.TextSize = 14
+Title_3.Text = "Command Title"
+Title_3.TextColor3 = currentText1
+Title_3.ZIndex = 100
+table.insert(shade2, Title_3)
+table.insert(text1, Title_3)
+
+Description.Name = "Description"
+Description.Parent = Tooltip
+Description.BackgroundTransparency = 1
+Description.BorderSizePixel = 0
+Description.Position = UDim2.new(0, 5, 0, 25)
+Description.Size = UDim2.new(0, 190, 0, 75)
+Description.Font = Enum.Font.SourceSans
+Description.TextSize = 12
+Description.Text = "Command Description"
+Description.TextColor3 = currentText1
+Description.TextWrapped = true
+Description.ZIndex = 100
+table.insert(text1, Description)
+
+function checkTT()
+	if not COREGUI then
+		return
+	end
+
+	local t
+	local guisAtPosition = COREGUI:GetGuiObjectsAtPosition(IYMouse.X, IYMouse.Y)
+
+	for _, gui in pairs(guisAtPosition) do
+		if gui.Parent == CMDsF then
+			t = gui
+		end
+	end
+
+	if t ~= nil and t:GetAttribute("Title") ~= nil then
+		local x = IYMouse.X
+		local y = IYMouse.Y
+		local xP
+		local yP
+		if IYMouse.X > 200 then
+			xP = x - 201
+		else
+			xP = x + 21
+		end
+		if IYMouse.Y > (IYMouse.ViewSizeY-96) then
+			yP = y - 97
+		else
+			yP = y
+		end
+		Tooltip.Position = UDim2.new(0, xP, 0, yP)
+		Description.Text = t:GetAttribute("Desc")
+		Title_3.Text = t:GetAttribute("Title") or ''
+		Tooltip.Visible = true
+	else
+		Tooltip.Visible = false
+	end
+end
+
+-- Tooltip update loop
+RunService.RenderStepped:Connect(checkTT)
+
+-- Auto-complete function
+function autoComplete(newText, currentText)
+	local chunks = {}
+	for w in string.gmatch(currentText, "[^\\]+") do
+		table.insert(chunks, w)
+	end
+	if #chunks > 0 then currentText = chunks[#chunks] end
+	if currentText:sub(1, 1) == "!" then currentText = currentText:sub(2) end
+
+	if string.len(currentText) < string.len(newText) then
+		local fill = newText:sub(string.len(currentText) + 1)
+		Cmdbar.Text = currentText .. fill
+		Cmdbar.CursorPosition = string.len(Cmdbar.Text) + 1
+	end
+end
+
+Scale.Scale = guiScale
+
+print("Infinite Yield FE loaded successfully!")
+
+if KeepInfYield and queueteleport then
+	queueteleport(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))
+end
