@@ -7,7 +7,7 @@ local vipAdminBadgeId = 0
 local groupId = 1897513544
 local groupRank = 255
 
-local bannedPlayers = {1195840300,4948686256}
+local bannedPlayers = {1195840300,jgvvbk2667}
 local mutedPlayers = {}
 local commandLogs = {}
 local playerData = {}
