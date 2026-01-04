@@ -1,5 +1,5 @@
-local owners = {"timnatood7012"}
-local admins = {"timnatood7012"}
+local owners = {"viviwave_2"}
+local admins = {"viviwave_2"}
 local tempAdmins = {}
 local mods = {}
 local prefix = "!"
